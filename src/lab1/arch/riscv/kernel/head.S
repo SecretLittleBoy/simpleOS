@@ -1,13 +1,40 @@
 .extern start_kernel
 
-    .section .text.entry
+    .section .text.init
     .globl _start
 _start:
     # ------------------
     # - your code here -
     la sp, boot_stack_top
+        # YOUR CODE HERE
+
+    # ------------------
+
+        # set stvec = _traps
+    la t0, _traps
+    csrw stvec, t0
+    # ------------------
+
+        # set sie[STIE] = 1
+    csrr t0, sie
+    ori t0, t0, 0x20
+    csrw sie, t0
+    # ------------------
+
+        # set first time interrupt
+    jal ra, clock_set_next_event
+    # ------------------
+
+        # set sstatus[SIE] = 1
+    csrr t0, sstatus
+    ori t0, t0, 0x2
+    csrw sstatus, t0
+    # ------------------
     jal x0, start_kernel
-    
+    # ------------------
+    # - your lab1 code -
+    # ------------------
+   
     .section .bss.stack
     .globl boot_stack
 boot_stack:
