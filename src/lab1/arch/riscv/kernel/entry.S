@@ -38,8 +38,8 @@ _traps:
     sd x29, 224(sp)
     sd x30, 232(sp)
     sd x31, 240(sp)
-    csrr t0, sepc
-    sd t0, 248(sp)
+    //csrr t0, sepc
+    //sd t0, 248(sp) //sepc寄存器貌似不需要保存
     # -----------
 
         # 2. call trap_handler
@@ -51,8 +51,8 @@ _traps:
     # -----------
 
         # 3. restore sepc and 32 registers (x2(sp) should be restore last) from stack
-    ld t0, 248(sp)
-    csrw sepc, t0
+    //ld t0, 248(sp)
+    //csrw sepc, t0
     ld x1, 0(sp)
     ld x3, 16(sp)
     ld x4, 24(sp)

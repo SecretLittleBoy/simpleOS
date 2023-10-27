@@ -5,8 +5,7 @@ scause ( Supervisor Cause Register ), 会记录 trap 发生的原因，还会记
 sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
 */
 
-void trap_handler(unsigned long scause, unsigned long sepc)
-{
+void trap_handler(unsigned long scause, unsigned long sepc){
     // 通过 `scause` 判断trap类型
     // 如果是interrupt 判断是否是timer interrupt
     // 如果是timer interrupt 则打印输出相关信息, 并通过 `clock_set_next_event()` 设置下一次时钟中断
@@ -26,5 +25,4 @@ void trap_handler(unsigned long scause, unsigned long sepc)
     }
     
     printk("other interrupt or exception\n");
-    
 }
