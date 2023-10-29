@@ -2,10 +2,8 @@
     .align 2
     .globl _traps 
 _traps:
-    # YOUR CODE HERE
-    # -----------
 
-        # 1. save 32 registers and sepc to stack
+    # 1. save 32 registers and sepc to stack
     addi sp, sp, -256
     sd x1, 0(sp)
     sd x2, 8(sp)
@@ -38,21 +36,15 @@ _traps:
     sd x29, 224(sp)
     sd x30, 232(sp)
     sd x31, 240(sp)
-    //csrr t0, sepc
-    //sd t0, 248(sp) //sepc寄存器貌似不需要保存
-    # -----------
 
-        # 2. call trap_handler
+    # 2. call trap_handler
     //RISC-V的约定是，函数使用a0到a7这八个寄存器来传递输入参数，其中a0是最左边的参数，a7是最右边的参数。
     //函数使用a0寄存器来返回输出值。如果函数有多于八个的输入参数，那么多余的参数会被放在栈上。
     csrr a0, scause
     csrr a1, sepc
     jal x1, trap_handler
-    # -----------
 
-        # 3. restore sepc and 32 registers (x2(sp) should be restore last) from stack
-    //ld t0, 248(sp)
-    //csrw sepc, t0
+    # 3. restore sepc and 32 registers (x2(sp) should be restore last) from stack
     ld x1, 0(sp)
     ld x3, 16(sp)
     ld x4, 24(sp)
@@ -85,8 +77,6 @@ _traps:
     ld x31, 240(sp)
     ld x2, 8(sp)
     addi sp, sp, 256
-    # -----------
 
-        # 4. return from trap
+    # 4. return from trap
     sret
-    # -----------

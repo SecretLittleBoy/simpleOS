@@ -9,5 +9,5 @@ int start_kernel() {
 
     test(); // DO NOT DELETE !!!
 
-	return 0;
+    return 0;
 }

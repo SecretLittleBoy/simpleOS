@@ -2,9 +2,9 @@
 #define _SCHEDULE_TEST_H_
 #include "types.h"
 
-/**
+/*
  * new content for unit test
-*/
+ */
 #define COUNTER_SEED 29
 #define PRIORITY_SEED 17
 
