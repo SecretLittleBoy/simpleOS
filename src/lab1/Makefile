@@ -15,6 +15,14 @@ CFLAG = ${CF} ${INCLUDE}
 all:
 	${MAKE} -C lib all
 	${MAKE} -C init all
+	${MAKE} -C test all
+	${MAKE} -C arch/riscv all
+	@echo -e '\n'Build Finished OK
+
+TEST:
+	${MAKE} -C lib all
+	${MAKE} -C test test
+	${MAKE} -C init all
 	${MAKE} -C arch/riscv all
 	@echo -e '\n'Build Finished OK
 
@@ -22,12 +30,21 @@ run: all
 	@echo Launch the qemu ......
 	@qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios default 
 
+test-run: TEST
+	@echo Launch the qemu ......
+	@qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios default 
+
 debug: all
+	@echo Launch the qemu for debug ......
+	@qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios default -S -s
+
+test-debug: TEST
 	@echo Launch the qemu for debug ......
 	@qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios default -S -s
 
 clean:
 	${MAKE} -C lib clean
+	${MAKE} -C test clean
 	${MAKE} -C init clean
 	${MAKE} -C arch/riscv clean
 	$(shell test -f vmlinux && rm vmlinux)
