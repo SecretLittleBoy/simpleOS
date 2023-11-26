@@ -4,10 +4,20 @@
     .globl _start
 _start:
 
-    #la sp, boot_stack_top
-    lui sp, 0x40104
-    slli sp, sp, 1 # sp = 0x80208000
-
+    #lui sp, 0x40104
+    #slli sp, sp, 1 # sp = 0x80208000 # 8000 是因为栈空间4000，vmlinux.lds中描述的.text等段总共4000，加起来8000
+    
+    # get 0xffffffdf80000000 (PA2VA_OFFSET) in t0
+    addi t0, x0, 1  # t0 = 0x00000001
+    slli t0, t0, 31 # t0 = 0x80000000
+    lui t1, 0xfffff    # t1 = 0xfffff000
+    addi t1, t1, 0x7ef # t1 = 0xfffff7ef
+    addi t1, t1, 0x7f0 # t1 = 0xffffffdf
+    slli t1, t1, 31
+    slli t1, t1, 1     # t1 = 0xffffffdf00000000
+    add t0, t0, t1    # t0 = 0xffffffdf80000000 = PA2VA_OFFSET
+    la sp, boot_stack_top # boot_stack_top是虚拟地址
+    sub sp, sp, t0 # sp = sp - PA2VA_OFFSET
 
     jal ra, setup_vm
     jal ra, relocate
