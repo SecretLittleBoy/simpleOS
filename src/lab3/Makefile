@@ -4,7 +4,7 @@ GCC=${CROSS_}gcc
 LD=${CROSS_}ld
 OBJCOPY=${CROSS_}objcopy
 
-ISA=rv64imafd
+ISA=rv64imafd_zifencei
 ABI=lp64
 
 INCLUDE = -I $(shell pwd)/include -I $(shell pwd)/arch/riscv/include
@@ -14,7 +14,7 @@ DEFINE = -D PRIORITY_SCHEDULE
 CFLAG = ${CF} ${INCLUDE} ${DEFINE}
 
 .PHONY:all run debug clean
-all:
+all: clean
 	${MAKE} -C lib all
 	${MAKE} -C init all
 	${MAKE} -C test all
