@@ -38,7 +38,7 @@ void setup_vm(void) {
     //  0x80000000>>30,再取低9位即为L32
     early_pgtbl[2] = (uint64)(0 | 0x20000000U | 15U); // 倒数四位为1111
     // early_pgtbl[L2] = (uint64)(0 | 0x80000000>>30 | 15U)
-    // 0xffffffe000000000>>30,再取低9位即为L2=0x180
+    // 0xffffffe000000000>>30,再取低9位即为L2=0x180 , 即Sv39 virtual address的VPN[2]
     early_pgtbl[0x180] = (uint64)(0 | 0x20000000U | 15U); // 倒数四位为1111
 }
 
