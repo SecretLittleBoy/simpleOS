@@ -105,10 +105,10 @@ void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, int perm) { 
 
         // 设置第二级页表
         if (pgtbl[vpn2] & 0x1) {
-            pgtbl2 = ((pgtbl[vpn2] >> 10) & 0xfffffffffff) << 12;//左移10位之后取44位，再右移12位
+            pgtbl2 = ((pgtbl[vpn2] >> 10) & 0xfffffffffff) << 12; // 左移10位之后取44位，再右移12位
         } else {
-            pgtbl2 = kalloc() - PA2VA_OFFSET;   // 新申请一个页用于存储页表
-            pgtbl[vpn2] = (uint64)pgtbl2 >> 2; // 地址中的ppn位于12-55位，pte中的ppn位于10-53位
+            pgtbl2 = kalloc() - PA2VA_OFFSET; // 新申请一个页用于存储页表
+            pgtbl[vpn2] = (((uint64)pgtbl2 >> 12) << 10); // 地址中的ppn位于12-55位，pte中的ppn位于10-53位
             pgtbl[vpn2] |= 0x1;
         }
 

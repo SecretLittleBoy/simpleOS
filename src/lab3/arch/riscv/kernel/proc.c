@@ -62,8 +62,8 @@ void dummy() {
         if ((last_counter == -1 || current->counter != last_counter) && current->counter > 0) {
             last_counter = current->counter;
             auto_inc_local_var = (auto_inc_local_var + 1) % MOD;
-            printk("[PID = %d] is running. auto_inc_local_var = %d,current->counter= %d\n",
-                   current->pid, auto_inc_local_var, current->counter);
+            printk("[PID = %d] is running. auto_inc_local_var = %d,current->counter= %d,address= %x\n",
+                   current->pid, auto_inc_local_var, current->counter,(uint64)current);
             if (current->counter == 1) { // forced the counter to be zero if this thread is going to be scheduled
                 --(current->counter);    // in case that the new counter is also 1, leading the information not printed.
             }
