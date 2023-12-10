@@ -39,4 +39,7 @@
 
 #define PA2VA_OFFSET (VM_START - PHY_START) //0xffffffdf80000000
 
+#define USER_START (0x0000000000000000) // user space start virtual address
+#define USER_END (0x0000004000000000)   // user space end virtual address
+
 #endif
