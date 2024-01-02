@@ -4,7 +4,7 @@
 #include "rand.h"
 #include "printk.h"
 #include "test.h"
-
+#include "elf.h"
 extern void __dummy();
 
 struct task_struct *idle;           // idle process
@@ -16,6 +16,55 @@ struct task_struct *task[NR_TASKS]; // 线程数组, 所有的线程都保存在
  */
 extern uint64 task_test_priority[]; // test_init 后, 用于初始化 task[i].priority 的数组
 extern uint64 task_test_counter[];  // test_init 后, 用于初始化 task[i].counter  的数组
+extern uint64 swapper_pg_dir[512] __attribute__((__aligned__(0x1000)));
+extern char _sramdisk[];
+extern uint64 _eramdisk[];
+
+static uint64_t load_program(struct task_struct *task) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_sramdisk; // 此时指向elf数据头
+
+    uint64_t phdr_start = (uint64_t)ehdr + ehdr->e_phoff; // 指向数据体
+    int phdr_cnt = ehdr->e_phnum;                         // segement的metedata数量
+
+    Elf64_Phdr *phdr;
+    for (int i = 0; i < phdr_cnt; i++) {                            // 遍历每一个segement
+        phdr = (Elf64_Phdr *)(phdr_start + sizeof(Elf64_Phdr) * i); // 获取当前segement的数据指针
+        if (phdr->p_type == PT_LOAD) {
+            /*当前segement的起始虚地址，可能并不刚好是一个页面的起始地址，分配页面的时候还需要考虑多余的这部分地址，否则地址转换会失败*/
+            uint64 offset = (uint64)(phdr->p_vaddr) - PGROUNDDOWN(phdr->p_vaddr);
+            uint64 sz = (phdr->p_memsz + offset) / PGSIZE + 1;
+            uint64 tar_addr = alloc_pages(sz);
+            // printk("%lx\n",((uint64*)tar_addr)[0]);
+            uint64 src_addr = (uint64)(_sramdisk) + phdr->p_offset;
+            /*在对应位置copy程序内容*/
+            memcpy(tar_addr + offset, src_addr, phdr->p_memsz);
+            int perm = 0x11 | (phdr->p_flags << 1);
+
+            // va->pa的映射，块头部空白的地址也需要映射，这样才能保证正确（类似于内部碎片）
+            create_mapping((uint64 *)task->pgd, (uint64)PGROUNDDOWN(phdr->p_vaddr), (uint64)(tar_addr)-PA2VA_OFFSET, sz, perm);
+        }
+    }
+
+    // allocate user stack and do mapping
+    uint64 addr = alloc_page();
+    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), 1, 23); // 映射用户栈 U-WRV
+
+    task->thread.sepc = ehdr->e_entry;
+    task->thread.sstatus = SSTATUS_SPIE | SSTATUS_SUM;
+    task->thread.sscratch = USER_END;
+}
+
+static void useBinFile(struct task_struct *task){
+    task->thread.sepc = USER_START;                    // 将 sepc 设置为 USER_START
+    task->thread.sstatus = SSTATUS_SPIE | SSTATUS_SUM; // 配置 sstatus 中的 SPP（使得 sret 返回至 U-Mode）， SPIE （sret 之后开启中断）， SUM（S-Mode 可以访问 User 页面）
+    task->thread.sscratch = USER_END;                  // 将 sscratch 设置为 U-Mode 的 sp，其值为 USER_END （即，用户态栈被放置在 user space 的最后一个页面）。
+
+    create_mapping(task->pgd, USER_START, _sramdisk - PA2VA_OFFSET, 4, 0x1B); // 映射用户程序 UX_RV 0x1B=0b11011 , uapp大小为4个页面
+
+    // allocate user stack and do mapping
+    uint64 addr = alloc_page();
+    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), 1, 23); // 映射用户栈 U-WRV 23=0b10111
+}
 
 void task_init() {
     test_init(NR_TASKS);
@@ -47,7 +96,13 @@ void task_init() {
         task[i]->priority = task_test_priority[i];
         task[i]->pid = i;
         task[i]->thread.ra = (uint64)__dummy;
-        task[i]->thread.sp = addr + PGSIZE;
+        task[i]->thread.sp = addr + PGSIZE - 1; //-1 ??//todo
+
+        task[i]->pgd = alloc_page();
+        memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
+
+        //load_program(task[i]);
+        useBinFile(task[i]);
     }
 
     printk("...proc_init done!\n");
@@ -63,7 +118,7 @@ void dummy() {
             last_counter = current->counter;
             auto_inc_local_var = (auto_inc_local_var + 1) % MOD;
             printk("[PID = %d] is running. auto_inc_local_var = %d,current->counter= %d,address= %x\n",
-                   current->pid, auto_inc_local_var, current->counter,(uint64)current);
+                   current->pid, auto_inc_local_var, current->counter, (uint64)current);
             if (current->counter == 1) { // forced the counter to be zero if this thread is going to be scheduled
                 --(current->counter);    // in case that the new counter is also 1, leading the information not printed.
             }
@@ -115,7 +170,7 @@ START_OF_PRIORITY_SCHEDULE:
     uint64 max = 0;
     int maxIndex = 0;
     for (int i = 1; i < NR_TASKS; ++i) {
-        //printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
+        // printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
         if (task[i]->priority > max && task[i]->counter > 0) {
             max = task[i]->priority;
             maxIndex = i;
@@ -127,16 +182,22 @@ START_OF_PRIORITY_SCHEDULE:
         }
         goto START_OF_PRIORITY_SCHEDULE;
     }
-    //printk("switch_to ing  maxIndex = %d\n", maxIndex);
+    // printk("switch_to ing  maxIndex = %d\n", maxIndex);
     switch_to(task[maxIndex]);
 #endif
 }
 
-extern void __switch_to(struct task_struct *prev, struct task_struct *next);
+extern void __switch_to(struct task_struct *prev, struct task_struct *next, uint64 next_phy_pgtbl);
 void switch_to(struct task_struct *next) {
     if (current != next) {
         struct task_struct *prev = current;
         current = next;
-        __switch_to(prev, next);
+        /*
+        0x8 << 60: satp mode
+        next->pgd - PA2VA_OFFSET: get physical address, the virtual address of next->pgd 是内核虚拟地址，所以减去 内核虚拟地址和物理地址的偏移PA2VA_OFFSET 就得到物理地址
+        >> 12: get ppn
+        */
+        uint64 next_phy_pgtbl = ((uint64)(next->pgd) - PA2VA_OFFSET) >> 12 | (0x8 << 60); 
+        __switch_to(prev, next, next_phy_pgtbl);
     }
 }

@@ -88,7 +88,7 @@ _start:
     addi t0, x0, 8
     slli t0, t0, 20
     slli t0, t0, 20
-    slli t0, t0, 20   # t0 = 0x8 << 60
+    slli t0, t0, 20   # t0 = 0x8 << 60 #63-60字段mode为8
     or t1, t1, t0
     csrw satp, t1
     ###################### 

@@ -1,6 +1,8 @@
 #include "types.h"
+#include "stdint.h"
+typedef unsigned long *pagetable_t;
 
-#define NR_TASKS (1 + 31) // 用于控制 最大线程数量 （idle 线程 + 31 内核线程）
+#define NR_TASKS (1 + 3) // 用于控制 最大线程数量 （idle 线程 + 31 内核线程）
 
 #define TASK_RUNNING 0 // 为了简化实验, 所有的线程都只有一种状态
 
@@ -19,6 +21,8 @@ struct thread_struct {
     uint64 ra;
     uint64 sp;
     uint64 s[12];
+
+    uint64_t sepc, sstatus, sscratch;
 };
 
 /* 线程数据结构 */
@@ -30,6 +34,14 @@ struct task_struct {
     uint64 pid;      // 线程id
 
     struct thread_struct thread;
+
+    pagetable_t pgd;
+};
+
+struct pt_regs {
+    uint64 reg[31];
+    uint64 sepc;
+    uint64 sstatus;
 };
 
 /* 线程初始化 创建 NR_TASKS 个线程 */

@@ -64,11 +64,6 @@ void setup_vm_final(void) {
     // mapping other memory -|W|R|V
     create_mapping(swapper_pg_dir, (uint64)&_sdata, (uint64)(&_sdata) - PA2VA_OFFSET, 32765, 7);
     printk("create_mapping all done\n");
-    // set satp with swapper_pg_dir
-    // uint64 satpValue = 0x8000000000000000;
-    // uint64 swapper_p = (uint64)swapper_pg_dir - PA2VA_OFFSET;
-    // uint64 swapper_ppn = swapper_p >> 12;
-    // satpValue += swapper_ppn;
 
     // asm volatile("csrw satp,%[src]" ::[src] "r"(satpValue) :);
     __asm__ volatile("csrw satp, %[src]" ::[src] "r"((uint64)swapper_pg_dir) :); // todo why??
