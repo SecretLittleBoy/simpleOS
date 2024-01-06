@@ -9,9 +9,9 @@ typedef unsigned long *pagetable_t;
 /* 线程状态段数据结构 */
 struct thread_struct {
     // 每个线程都有自己的用户栈和内核栈
-    uint64 ra; // 返回地址. 初始化为 __dummy, 因为第一次切换到此线程时, 不用从此线程的内核栈中恢复此线程的上下文。之后的ra值指向switch_to的结尾，之后会跳转到_traps，从此线程的内核栈中恢复此线程的上下文。
-    uint64 sp; // 此线程的内核栈指针。初始化为此线程的内核栈顶。
-    uint64 s[12]; // 保存的寄存器
+    uint64 ra;                        // 返回地址. 初始化为 __dummy, 因为第一次切换到此线程时, 不用从此线程的内核栈中恢复此线程的上下文。之后的ra值指向switch_to的结尾，之后会跳转到_traps，从此线程的内核栈中恢复此线程的上下文。
+    uint64 sp;                        // 此线程的内核栈指针。初始化为此线程的内核栈顶。
+    uint64 s[12];                     // 保存的寄存器
     uint64_t sepc, sstatus, sscratch; // sscratch保存用户态栈的栈顶，初始化为USER_END
 };
 
@@ -28,7 +28,39 @@ struct task_struct {
 };
 
 struct pt_regs {
-    uint64 reg[31];
+    //31个通用寄存器 from x0 to x31
+    uint64 ra;
+    uint64 sp;
+    uint64 gp;
+    uint64 tp;
+    uint64 t0;
+    uint64 t1;
+    uint64 t2;
+    uint64 s0; // or fp
+    uint64 s1;
+    uint64 a0;
+    uint64 a1;
+    uint64 a2;
+    uint64 a3;
+    uint64 a4;
+    uint64 a5;
+    uint64 a6;
+    uint64 a7;
+    uint64 s2;
+    uint64 s3;
+    uint64 s4;
+    uint64 s5;
+    uint64 s6;
+    uint64 s7;
+    uint64 s8;
+    uint64 s9;
+    uint64 s10;
+    uint64 s11;
+    uint64 t3;
+    uint64 t4;
+    uint64 t5;
+    uint64 t6;
+
     uint64 sepc;
     uint64 sstatus;
     uint64 sscratch;

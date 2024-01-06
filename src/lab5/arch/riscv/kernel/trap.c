@@ -25,13 +25,12 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
     } else if (scause & ECALL_FROM_USER) { // ecall-from-user-mode
         //  printk("ecall from user mode\n");
         // 系统调用参数使用 a0 - a5 ，系统调用号使用 a7 ， 系统调用的返回值会被保存到 a0, a1 中。
-        if (regs->reg[16] == SYS_WRITE) { // regs->reg[16]: a7
-            printk("write to fd %d, %d bytes\n", regs->reg[9], regs->reg[11]);
-            regs->reg[9] = sys_write(regs->reg[9], (const char *)regs->reg[10], regs->reg[11]); // 返回值放入a0
-            //  a0                       a0            a1            a2
-        } else if (regs->reg[16] == SYS_GETPID) { // a7
-            regs->reg[9] = sys_getpid();          // a0
-            printk("getpid: %d\n", regs->reg[9]);
+        if (regs->a7 == SYS_WRITE) {
+            printk("write to fd %d, %d bytes\n", regs->a0, regs->a2);
+            regs->a0 = sys_write(regs->a0, (const char *)regs->a1, regs->a2); // 返回值放入a0
+        } else if (regs->a7 == SYS_GETPID) {
+            regs->a0 = sys_getpid();
+            printk("getpid: %d\n", regs->a0);
         }
         regs->sepc += 4;
         return;
