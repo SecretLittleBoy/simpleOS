@@ -11,9 +11,6 @@ struct task_struct *idle;           // idle process
 struct task_struct *current;        // 指向当前运行线程的 `task_struct`
 struct task_struct *task[NR_TASKS]; // 线程数组, 所有的线程都保存在此
 
-/**
- * new content for unit test of 2023 OS lab2
- */
 extern uint64 task_test_priority[]; // test_init 后, 用于初始化 task[i].priority 的数组
 extern uint64 task_test_counter[];  // test_init 后, 用于初始化 task[i].counter  的数组
 extern uint64 swapper_pg_dir[512] __attribute__((__aligned__(0x1000)));
@@ -55,11 +52,11 @@ static uint64_t load_program(struct task_struct *task) {
 }
 
 static void useBinFile(struct task_struct *task) {
-    task->thread.sepc = USER_START;                    // 将 sepc 设置为 USER_START
-    task->thread.sstatus = SSTATUS_SPIE | SSTATUS_SUM; // 配置 sstatus 中的 SPP（使得 sret 返回至 U-Mode）， SPIE （sret 之后开启中断）， SUM（S-Mode 可以访问 User 页面）
-    task->thread.sscratch = USER_END;                  // 将 sscratch 设置为 U-Mode 的 sp，其值为 USER_END （即，用户态栈被放置在 user space 的最后一个页面）。
+    task->thread.sepc = USER_START;                                        // 将 sepc 设置为 USER_START
+    task->thread.sstatus = SSTATUS_SPP_UMODE | SSTATUS_SPIE | SSTATUS_SUM; // 配置 sstatus 中的 SPP（使得 sret 返回至 U-Mode）， SPIE （sret 之后开启中断）， SUM（S-Mode 可以访问 User 页面）
+    task->thread.sscratch = USER_END;                                      // 将 sscratch 设置为 U-Mode 的 sp，其值为 USER_END （即，用户态栈被放置在 user space 的最后一个页面）。
 
-    // 将 uapp 所在的页面映射到每个进行的页表中。
+    // 将 uapp 所在的页面映射到每个进程的页表中。
     // 注意，在程序运行过程中，有部分数据不在栈上，而在初始化的过程中就已经被分配了空间
     // 所以，二进制文件需要先被拷贝到一块某个进程专用的内存之后
     // 再进行映射，防止所有的进程共享数据，造成预期外的进程间相互影响
@@ -72,21 +69,21 @@ static void useBinFile(struct task_struct *task) {
     memcpy((uint64 *)pages_dest_addr, (uint64 *)pages_src_addr, num_pages_to_copy * PGSIZE);
 
     create_mapping((uint64 *)task->pgd, (uint64)USER_START,
-                   pages_dest_addr - PA2VA_OFFSET, num_pages_to_copy * PGSIZE, 31);
+                   pages_dest_addr - PA2VA_OFFSET, num_pages_to_copy * PGSIZE, PTE_USER | PTE_EXECUTE | PTE_WRITE | PTE_READ | PTE_VALID);
     // allocate user stack and do mapping
     uint64 user_stack_addr = alloc_page();
-    create_mapping((uint64 *)task->pgd, USER_END - PGSIZE, user_stack_addr - PA2VA_OFFSET, PGSIZE, 23);
+    create_mapping((uint64 *)task->pgd, USER_END - PGSIZE, user_stack_addr - PA2VA_OFFSET, PGSIZE, PTE_USER | PTE_WRITE | PTE_READ | PTE_VALID);
 }
 
 void task_init() {
     test_init(NR_TASKS);
     printk("task_init start\n");
-    // 1. 调用 kalloc() 为 idle 分配一个物理页
+    // 1. 调用 alloc_page() 为 idle 分配一个物理页
     // 2. 设置 state 为 TASK_RUNNING;
     // 3. 由于 idle 不参与调度 可以将其 counter / priority 设置为 0
     // 4. 设置 idle 的 pid 为 0
     // 5. 将 current 和 task[0] 指向 idle
-    idle = (struct task_struct *)kalloc();
+    idle = (struct task_struct *)alloc_page();
     idle->state = TASK_RUNNING;
     idle->counter = 0;
     idle->priority = 0;
@@ -99,9 +96,9 @@ void task_init() {
     //      task[i].counter  = task_test_counter[i];
     //      task[i].priority = task_test_priority[i];
     // 3. 为 task[1] ~ task[NR_TASKS - 1] 设置 `thread_struct` 中的 `ra` 和 `sp`,
-    // 4. 其中 `ra` 设置为 __dummy （见 4.3.2）的地址,  `sp` 设置为 该线程申请的物理页的高地址
+    // 4. 其中 `ra` 设置为 __dummy 的地址,  `sp` 设置为 该线程申请的物理页的高地址
     for (int i = 1; i < NR_TASKS; ++i) {
-        task[i] = (struct task_struct *)kalloc();
+        task[i] = (struct task_struct *)alloc_page();
         task[i]->state = TASK_RUNNING;
         task[i]->counter = task_test_counter[i];
         task[i]->priority = task_test_priority[i];
@@ -115,11 +112,10 @@ void task_init() {
         // load_program(task[i]);
         useBinFile(task[i]);
     }
-
     printk("...task_init done!\n");
 }
 
-void dummy() {
+void dummy() { // 一个内核态程序
     schedule_test();
     uint64 MOD = 1000000007;
     uint64 auto_inc_local_var = 0;
@@ -139,7 +135,7 @@ void dummy() {
 
 void do_timer() {
     // 1. 如果当前线程是 idle 线程 直接进行调度
-    // 2. 如果当前线程不是 idle 对当前线程的运行剩余时间减1 若剩余时间仍然大于0 则直接返回 否则进行调度
+    // 2. 如果当前线程不是 idle 对当前线程的运行剩余时间减1 若剩余时间仍然大于0 则直接返回，否则进行调度
     if (current == idle) {
         printk("current is idle,going to schedule\n");
         schedule();
@@ -203,12 +199,8 @@ void switch_to(struct task_struct *next) {
     if (current != next) {
         struct task_struct *prev = current;
         current = next;
-        /*
-        0x8 << 60: satp mode
-        next->pgd - PA2VA_OFFSET: get physical address, the virtual address of next->pgd 是内核虚拟地址，所以减去 内核虚拟地址和物理地址的偏移PA2VA_OFFSET 就得到物理地址
-        >> 12: get ppn
-        */
-        uint64 next_phy_pgtbl = ((uint64)(next->pgd) - PA2VA_OFFSET) >> 12 | (0x8L << 60);
+        // get next's satp Register
+        uint64 next_phy_pgtbl = PhysicalAddress2PPN(VA2PA(next->pgd)) | Sv39Mode;
         __switch_to(&(prev->thread), &(next->thread), next_phy_pgtbl);
     }
 }

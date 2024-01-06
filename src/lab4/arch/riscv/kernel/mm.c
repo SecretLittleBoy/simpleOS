@@ -1,15 +1,11 @@
 #include "defs.h"
 #include "string.h"
 #include "mm.h"
-
 #include "printk.h"
 
-#define VA2PA(x) ((x - (uint64)PA2VA_OFFSET))
-#define PA2VA(x) ((x + (uint64)PA2VA_OFFSET))
 #define PFN2PHYS(x) (((uint64)(x) << 12) + PHY_START)
 #define PHYS2PFN(x) ((((uint64)(x)-PHY_START) >> 12))
 
-// fine, write buddy system here
 #define LEFT_LEAF(index) ((index) * 2 + 1)
 #define RIGHT_LEAF(index) ((index) * 2 + 2)
 #define PARENT(index) (((index) + 1) / 2 - 1)
@@ -34,62 +30,7 @@ static uint64 fixsize(uint64 size) {
     return size + 1;
 }
 
-void buddy_init() {
-    uint64 buddy_size = (uint64)PHY_SIZE / PGSIZE;
-
-    if (!IS_POWER_OF_2(buddy_size))
-        buddy_size = fixsize(buddy_size);
-
-    buddy.size = buddy_size;
-    buddy.bitmap = free_page_start;
-    free_page_start += 2 * buddy.size * sizeof(*buddy.bitmap);
-    memset(buddy.bitmap, 0, 2 * buddy.size * sizeof(*buddy.bitmap));
-
-    uint64 node_size = buddy.size * 2;
-    for (uint64 i = 0; i < 2 * buddy.size - 1; ++i) {
-        if (IS_POWER_OF_2(i + 1))
-            node_size /= 2;
-        buddy.bitmap[i] = node_size;
-    }
-
-    for (uint64 pfn = 0; (uint64)PFN2PHYS(pfn) < VA2PA((uint64)free_page_start); pfn++) {
-        buddy_alloc(1);
-    }
-
-    printk("...buddy_init done!\n");
-    return;
-}
-
-void buddy_free(uint64 pfn) {
-    uint64 node_size, index = 0;
-    uint64 left_longest, right_longest;
-
-    node_size = 1;
-    index = pfn + buddy.size - 1;
-
-    for (; buddy.bitmap[index]; index = PARENT(index)) {
-        node_size *= 2;
-        if (index == 0)
-            break;
-    }
-
-    buddy.bitmap[index] = node_size;
-
-    while (index) {
-        index = PARENT(index);
-        node_size *= 2;
-
-        left_longest = buddy.bitmap[LEFT_LEAF(index)];
-        right_longest = buddy.bitmap[RIGHT_LEAF(index)];
-
-        if (left_longest + right_longest == node_size)
-            buddy.bitmap[index] = node_size;
-        else
-            buddy.bitmap[index] = MAX(left_longest, right_longest);
-    }
-}
-
-uint64 buddy_alloc(uint64 nrpages) {
+static uint64 buddy_alloc(uint64 nrpages) {
 
     uint64 index = 0;
     uint64 node_size;
@@ -119,10 +60,62 @@ uint64 buddy_alloc(uint64 nrpages) {
             MAX(buddy.bitmap[LEFT_LEAF(index)], buddy.bitmap[RIGHT_LEAF(index)]);
     }
 
-    // printk("pfn: %lx\n", pfn);
-    // while(1);
-
     return pfn;
+}
+
+static void buddy_init() {
+    uint64 buddy_size = (uint64)PHY_SIZE / PGSIZE;
+
+    if (!IS_POWER_OF_2(buddy_size))
+        buddy_size = fixsize(buddy_size);
+
+    buddy.size = buddy_size;
+    buddy.bitmap = free_page_start;
+    free_page_start += 2 * buddy.size * sizeof(*buddy.bitmap);
+    memset(buddy.bitmap, 0, 2 * buddy.size * sizeof(*buddy.bitmap));
+
+    uint64 node_size = buddy.size * 2;
+    for (uint64 i = 0; i < 2 * buddy.size - 1; ++i) {
+        if (IS_POWER_OF_2(i + 1))
+            node_size /= 2;
+        buddy.bitmap[i] = node_size;
+    }
+
+    for (uint64 pfn = 0; (uint64)PFN2PHYS(pfn) < VA2PA((uint64)free_page_start); pfn++) {
+        buddy_alloc(1);
+    }
+
+    printk("...buddy_init done!\n");
+    return;
+}
+
+static void buddy_free(uint64 pfn) {
+    uint64 node_size, index = 0;
+    uint64 left_longest, right_longest;
+
+    node_size = 1;
+    index = pfn + buddy.size - 1;
+
+    for (; buddy.bitmap[index]; index = PARENT(index)) {
+        node_size *= 2;
+        if (index == 0)
+            break;
+    }
+
+    buddy.bitmap[index] = node_size;
+
+    while (index) {
+        index = PARENT(index);
+        node_size *= 2;
+
+        left_longest = buddy.bitmap[LEFT_LEAF(index)];
+        right_longest = buddy.bitmap[RIGHT_LEAF(index)];
+
+        if (left_longest + right_longest == node_size)
+            buddy.bitmap[index] = node_size;
+        else
+            buddy.bitmap[index] = MAX(left_longest, right_longest);
+    }
 }
 
 // 分配 nrpages 个页的地址空间，返回分配内存的地址。保证分配的内存在虚拟地址和物理地址上都是连续的
@@ -146,72 +139,6 @@ void free_pages(uint64 va) {
     buddy_free(PHYS2PFN(VA2PA(va)));
 }
 
-//*****************************************next code for labs before lab4
-struct {
-    struct run *freelist; // freelist 用于跟踪空闲的内存块。
-} kmem;
-
-// The kalloc function removes a block from the freelist and returns its address.
-uint64 kalloc() {
-    /*
-    struct run *r;
-
-    r = kmem.freelist;
-    kmem.freelist = r->next;
-
-    memset((void *)r, 0x0, PGSIZE);
-    return (uint64)r;
-    */
-    return alloc_page();
-}
-
-// The kfree function adds a block back to the freelist.
-void kfree(uint64 addr) {
-    /*
-    struct run *r;
-
-    // PGSIZE align
-    addr = addr & ~(PGSIZE - 1);
-
-    memset((void *)addr, 0x0, (uint64)PGSIZE);
-
-    r = (struct run *)addr;
-    r->next = kmem.freelist;
-    kmem.freelist = r;
-    return;
-    */
-    free_pages(addr);
-}
-
-// The kfreerange function frees a range of memory.
-void kfreerange(char *start, char *end) {
-    char *addr = (char *)PGROUNDUP((uint64)start);
-    for (; (uint64)(addr) + PGSIZE <= (uint64)end; addr += PGSIZE) {
-        kfree((uint64)addr);
-    }
-}
-
-/*
-Physical Address
--------------------------------------------
-                     | OpenSBI | Kernel |
--------------------------------------------
-                     ↑
-                0x80000000
-                     ├───────────────────────────────────────────────────┐
-                     |                                                   |
-Virtual Address      ↓                                                   ↓
------------------------------------------------------------------------------------------------
-                     | OpenSBI | Kernel |                                | OpenSBI | Kernel |
------------------------------------------------------------------------------------------------
-                     ↑                                                   ↑
-                0x80000000                                       0xffffffe000000000
-*/
-// 把虚拟地址从0x80000000到VM_START + PHY_END全部init
-// The mm_init function initializes the freelist.
 void mm_init(void) {
-    printk("mm_init start...\n");
-    //kfreerange(_ekernel, (char *)VM_START + PHY_SIZE); //_ekernel是虚拟地址
     buddy_init();
-    printk("...mm_init done!\n");
 }

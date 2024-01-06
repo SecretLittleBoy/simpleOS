@@ -9,15 +9,11 @@
 /*
 scause ( Supervisor Cause Register ), 会记录 trap 发生的原因，还会记录该 trap 是 Interrupt 还是 Exception。
 sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
+
+ecall ( Environment Call )，当我们在 S 态执行这条指令时，会触发一个 ecall-from-s-mode-exception，从而进入 M Mode 下的处理流程( 如设置定时器等 )；
+当我们在 U 态执行这条指令时，会触发一个 ecall-from-u-mode-exception，从而进入 S Mode 下的处理流程 ( 常用来进行系统调用 )。
 */
-
 void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs) {
-    // 通过 `scause` 判断trap类型
-    // 如果是interrupt 判断是否是timer interrupt
-    // 如果是timer interrupt 则打印输出相关信息, 并通过 `clock_set_next_event()` 设置下一次时钟中断
-    // `clock_set_next_event()` 见 4.3.4 节
-    // 其他interrupt / exception 可以直接忽略
-
     if (scause & INTERRUPT_SIG) { // it's interrupt
         scause = scause - INTERRUPT_SIG;
         if (!(scause ^ TIMER_INTERRUPT_SIG)) { // it's Supervisor timer interrupt
@@ -27,17 +23,14 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
             return;
         }
     } else if (scause & ECALL_FROM_USER) { // ecall-from-user-mode
-        // printk("ecall from user mode\n");
-        if (regs->reg[16] == SYS_WRITE) { // a7
+        //  printk("ecall from user mode\n");
+        // 系统调用参数使用 a0 - a5 ，系统调用号使用 a7 ， 系统调用的返回值会被保存到 a0, a1 中。
+        if (regs->reg[16] == SYS_WRITE) { // regs->reg[16]: a7
             printk("write to fd %d, %d bytes\n", regs->reg[9], regs->reg[11]);
-            regs->reg[9] = sys_write(regs->reg[9], (const char *)regs->reg[10], regs->reg[11]);
+            regs->reg[9] = sys_write(regs->reg[9], (const char *)regs->reg[10], regs->reg[11]); // 返回值放入a0
             //  a0                       a0            a1            a2
-        }
-
-        /* 172 号系统调用 sys_getpid() 该调用从current中获取当前的pid放入a0中返回，无参数。
-         *（ 具体见 user/getpid.c ） */
-        else if (regs->reg[16] == SYS_GETPID) {// a7
-            regs->reg[9] = sys_getpid();      // a0
+        } else if (regs->reg[16] == SYS_GETPID) { // a7
+            regs->reg[9] = sys_getpid();          // a0
             printk("getpid: %d\n", regs->reg[9]);
         }
         regs->sepc += 4;
