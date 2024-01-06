@@ -18,7 +18,7 @@ extern uint64 task_test_priority[]; // test_init 后, 用于初始化 task[i].pr
 extern uint64 task_test_counter[];  // test_init 后, 用于初始化 task[i].counter  的数组
 extern uint64 swapper_pg_dir[512] __attribute__((__aligned__(0x1000)));
 extern char _sramdisk[];
-extern uint64 _eramdisk[];
+extern char _eramdisk[];
 
 static uint64_t load_program(struct task_struct *task) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_sramdisk; // 此时指向elf数据头
@@ -54,27 +54,39 @@ static uint64_t load_program(struct task_struct *task) {
     task->thread.sscratch = USER_END;
 }
 
-static void useBinFile(struct task_struct *task){
+static void useBinFile(struct task_struct *task) {
     task->thread.sepc = USER_START;                    // 将 sepc 设置为 USER_START
     task->thread.sstatus = SSTATUS_SPIE | SSTATUS_SUM; // 配置 sstatus 中的 SPP（使得 sret 返回至 U-Mode）， SPIE （sret 之后开启中断）， SUM（S-Mode 可以访问 User 页面）
     task->thread.sscratch = USER_END;                  // 将 sscratch 设置为 U-Mode 的 sp，其值为 USER_END （即，用户态栈被放置在 user space 的最后一个页面）。
 
-    create_mapping(task->pgd, USER_START, _sramdisk - PA2VA_OFFSET, 4, 0x1B); // 映射用户程序 UX_RV 0x1B=0b11011 , uapp大小为4个页面
+    // 将 uapp 所在的页面映射到每个进行的页表中。
+    // 注意，在程序运行过程中，有部分数据不在栈上，而在初始化的过程中就已经被分配了空间
+    // 所以，二进制文件需要先被拷贝到一块某个进程专用的内存之后
+    // 再进行映射，防止所有的进程共享数据，造成预期外的进程间相互影响
 
+    /* 将二进制文件需要拷贝到一块某个进程专用的内存 */
+    uint64 num_pages_to_copy = (_eramdisk - _sramdisk) / PGSIZE + 1;
+    uint64 pages_dest_addr = alloc_pages(num_pages_to_copy);
+    uint64 pages_src_addr = (uint64)_sramdisk;
+    // p_offset：段内容的开始位置相对于文件开头的偏移量
+    memcpy((uint64 *)pages_dest_addr, (uint64 *)pages_src_addr, num_pages_to_copy * PGSIZE);
+
+    create_mapping((uint64 *)task->pgd, (uint64)USER_START,
+                   pages_dest_addr - PA2VA_OFFSET, num_pages_to_copy * PGSIZE, 31);
     // allocate user stack and do mapping
-    uint64 addr = alloc_page();
-    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), 1, 23); // 映射用户栈 U-WRV 23=0b10111
+    uint64 user_stack_addr = alloc_page();
+    create_mapping((uint64 *)task->pgd, USER_END - PGSIZE, user_stack_addr - PA2VA_OFFSET, PGSIZE, 23);
 }
 
 void task_init() {
     test_init(NR_TASKS);
+    printk("task_init start\n");
     // 1. 调用 kalloc() 为 idle 分配一个物理页
     // 2. 设置 state 为 TASK_RUNNING;
     // 3. 由于 idle 不参与调度 可以将其 counter / priority 设置为 0
     // 4. 设置 idle 的 pid 为 0
     // 5. 将 current 和 task[0] 指向 idle
-    uint64 idelAddr = kalloc();
-    idle = (struct task_struct *)idelAddr;
+    idle = (struct task_struct *)kalloc();
     idle->state = TASK_RUNNING;
     idle->counter = 0;
     idle->priority = 0;
@@ -89,23 +101,22 @@ void task_init() {
     // 3. 为 task[1] ~ task[NR_TASKS - 1] 设置 `thread_struct` 中的 `ra` 和 `sp`,
     // 4. 其中 `ra` 设置为 __dummy （见 4.3.2）的地址,  `sp` 设置为 该线程申请的物理页的高地址
     for (int i = 1; i < NR_TASKS; ++i) {
-        uint64 addr = kalloc();
-        task[i] = (struct task_struct *)addr;
+        task[i] = (struct task_struct *)kalloc();
         task[i]->state = TASK_RUNNING;
         task[i]->counter = task_test_counter[i];
         task[i]->priority = task_test_priority[i];
         task[i]->pid = i;
         task[i]->thread.ra = (uint64)__dummy;
-        task[i]->thread.sp = addr + PGSIZE - 1; //-1 ??//todo
+        task[i]->thread.sp = (uint64)task[i] + PGSIZE - 1;
 
         task[i]->pgd = alloc_page();
         memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
 
-        //load_program(task[i]);
+        // load_program(task[i]);
         useBinFile(task[i]);
     }
 
-    printk("...proc_init done!\n");
+    printk("...task_init done!\n");
 }
 
 void dummy() {
@@ -170,7 +181,7 @@ START_OF_PRIORITY_SCHEDULE:
     uint64 max = 0;
     int maxIndex = 0;
     for (int i = 1; i < NR_TASKS; ++i) {
-        // printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
+        printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
         if (task[i]->priority > max && task[i]->counter > 0) {
             max = task[i]->priority;
             maxIndex = i;
@@ -182,7 +193,7 @@ START_OF_PRIORITY_SCHEDULE:
         }
         goto START_OF_PRIORITY_SCHEDULE;
     }
-    // printk("switch_to ing  maxIndex = %d\n", maxIndex);
+    printk("switch_to ing  maxIndex = %d\n", maxIndex);
     switch_to(task[maxIndex]);
 #endif
 }
@@ -197,7 +208,7 @@ void switch_to(struct task_struct *next) {
         next->pgd - PA2VA_OFFSET: get physical address, the virtual address of next->pgd 是内核虚拟地址，所以减去 内核虚拟地址和物理地址的偏移PA2VA_OFFSET 就得到物理地址
         >> 12: get ppn
         */
-        uint64 next_phy_pgtbl = ((uint64)(next->pgd) - PA2VA_OFFSET) >> 12 | (0x8 << 60); 
-        __switch_to(prev, next, next_phy_pgtbl);
+        uint64 next_phy_pgtbl = ((uint64)(next->pgd) - PA2VA_OFFSET) >> 12 | (0x8L << 60);
+        __switch_to(&(prev->thread), &(next->thread), next_phy_pgtbl);
     }
 }

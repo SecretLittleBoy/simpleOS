@@ -1,5 +1,8 @@
 #include "types.h"
 
+#define VA2PA(x) ((x - (uint64)PA2VA_OFFSET))
+#define PA2VA(x) ((x + (uint64)PA2VA_OFFSET))
+
 struct run {
     struct run *next;
 };

@@ -146,12 +146,14 @@ void free_pages(uint64 va) {
     buddy_free(PHYS2PFN(VA2PA(va)));
 }
 
+//*****************************************next code for labs before lab4
 struct {
     struct run *freelist; // freelist 用于跟踪空闲的内存块。
 } kmem;
 
 // The kalloc function removes a block from the freelist and returns its address.
 uint64 kalloc() {
+    /*
     struct run *r;
 
     r = kmem.freelist;
@@ -159,10 +161,13 @@ uint64 kalloc() {
 
     memset((void *)r, 0x0, PGSIZE);
     return (uint64)r;
+    */
+    return alloc_page();
 }
 
 // The kfree function adds a block back to the freelist.
 void kfree(uint64 addr) {
+    /*
     struct run *r;
 
     // PGSIZE align
@@ -173,8 +178,9 @@ void kfree(uint64 addr) {
     r = (struct run *)addr;
     r->next = kmem.freelist;
     kmem.freelist = r;
-
     return;
+    */
+    free_pages(addr);
 }
 
 // The kfreerange function frees a range of memory.
@@ -205,6 +211,7 @@ Virtual Address      ↓                                                   ↓
 // The mm_init function initializes the freelist.
 void mm_init(void) {
     printk("mm_init start...\n");
-    kfreerange(_ekernel, (char *)VM_START + PHY_SIZE); //_ekernel是虚拟地址
+    //kfreerange(_ekernel, (char *)VM_START + PHY_SIZE); //_ekernel是虚拟地址
+    buddy_init();
     printk("...mm_init done!\n");
 }

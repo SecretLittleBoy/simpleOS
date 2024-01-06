@@ -5,7 +5,12 @@ extern struct task_struct *current;
 
 long sys_write(unsigned int fd, const char *buf, size_t count) {
     if (fd == 1) {
-        printk("%s", buf);
+        char str[count + 1];
+        for (int i = 0; i < count; i++) {
+            str[i] = buf[i];
+        }
+        str[count] = '\0';
+        printk("%s", str);
     }
     return count;
 }

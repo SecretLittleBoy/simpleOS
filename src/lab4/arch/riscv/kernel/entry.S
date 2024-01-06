@@ -13,7 +13,7 @@ _traps:
 
 SKIP_SWITCH_STACK_0:
     # 1. save 32 registers and sepc to stack
-    addi sp, sp, -256
+    addi sp, sp, -272
     sd x1, 0(sp)
     sd x2, 8(sp)
     sd x3, 16(sp)
@@ -46,18 +46,22 @@ SKIP_SWITCH_STACK_0:
     sd x30, 232(sp)
     sd x31, 240(sp)
     csrr a1, sepc    # a1 = sepc
-    sd    a1,  248(sp)      
+    sd    a1,  248(sp)
     csrr t0, sstatus  # t0 = sscratch
     sd    t0, 256(sp)
+    csrr t0, sscratch
+    sd t0, 264(sp)
 
     # 2. call trap_handler
     //RISC-V的约定是，函数使用a0到a7这八个寄存器来传递输入参数，其中a0是最左边的参数，a7是最右边的参数。
     //函数使用a0寄存器来返回输出值。如果函数有多于八个的输入参数，那么多余的参数会被放在栈上。
     csrr a0, scause # scause ( Supervisor Cause Register ), 会记录 trap 发生的原因，还会记录该 trap 是 Interrupt 还是 Exception。
-    # csrr a1, sepc # sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
-    mv a2, sp
-    jal x1, trap_handler
+    csrr a1, sepc # sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
+    add a2, sp, x0
+    jal ra, trap_handler
 
+    ld t0, 264(sp)
+    csrw sscratch, t0
     ld    t0, 248(sp)
     csrw  sepc, t0
     ld    t0, 256(sp)
@@ -94,7 +98,7 @@ SKIP_SWITCH_STACK_0:
     ld x30, 232(sp)
     ld x31, 240(sp)
     ld x2, 8(sp) # x2 是 sp，所以要最后恢复
-    addi sp, sp, 264
+    addi sp, sp, 272
 
     #S-mode -> S-mode 不需要切换栈
     #S-mode -> U-mode 需要切换栈
@@ -123,8 +127,8 @@ __dummy:
     csrr sp, sscratch       # sp = ssc
     csrw sscratch, t0       # ssc = t0
     
-    la t0, dummy #todo why delete this line
-    csrw sepc, t0 #todo why delete this line
+    # la t0, dummy #todo why delete this line
+    # csrw sepc, t0 #todo why delete this line
     sret # exit from trap, and jump to dummy
 
 
@@ -133,22 +137,20 @@ __dummy:
 #将下一个线程的 thread_struct 中的相关数据载入到ra，sp，s0~s11中
     .globl __switch_to
 __switch_to:
-    # save state to prev process
-    add t0, a0, 48 # t0 = a0 + [ ask_struct 中 thread_struct 的偏移]
-    sd ra, 0(t0) # save ra
-    sd sp, 8(t0) # save sp
-    sd s0, 16(t0) # save s0
-    sd s1, 24(t0) # save s1
-    sd s2, 32(t0) # save s2
-    sd s3, 40(t0) # save s3
-    sd s4, 48(t0) # save s4
-    sd s5, 56(t0) # save s5
-    sd s6, 64(t0) # save s6
-    sd s7, 72(t0) # save s7
-    sd s8, 80(t0) # save s8
-    sd s9, 88(t0) # save s9
-    sd s10, 96(t0) # save s10
-    sd s11, 104(t0) # save s11
+    sd ra, 0(a0)
+    sd sp, 8(a0)
+    sd s0, 16(a0)
+    sd s1, 24(a0)
+    sd s2, 32(a0)
+    sd s3, 40(a0)
+    sd s4, 48(a0)
+    sd s5, 56(a0)
+    sd s6, 64(a0)
+    sd s7, 72(a0)
+    sd s8, 80(a0)
+    sd s9, 88(a0)
+    sd s10, 96(a0)
+    sd s11, 104(a0)
 
     csrr t0, sepc
     sd t0, 112(a0)
@@ -159,22 +161,21 @@ __switch_to:
     csrr t0, sscratch
     sd t0, 128(a0)
 
-    # restore state from next process
-    add t0, a1, 48 # t0 = a0 + [ ask_struct 中 thread_struct 的偏移]
-    ld ra, 0(t0) # restore ra
-    ld sp, 8(t0) # restore sp
-    ld s0, 16(t0) # restore s0
-    ld s1, 24(t0) # restore s1
-    ld s2, 32(t0) # restore s2
-    ld s3, 40(t0) # restore s3
-    ld s4, 48(t0) # restore s4
-    ld s5, 56(t0) # restore s5
-    ld s6, 64(t0) # restore s6
-    ld s7, 72(t0) # restore s7
-    ld s8, 80(t0) # restore s8
-    ld s9, 88(t0) # restore s9
-    ld s10, 96(t0) # restore s10
-    ld s11, 104(t0) # restore s11
+
+    ld ra, 0(a1)
+    ld sp, 8(a1)
+    ld s0, 16(a1)
+    ld s1, 24(a1)
+    ld s2, 32(a1)
+    ld s3, 40(a1)
+    ld s4, 48(a1)
+    ld s5, 56(a1)
+    ld s6, 64(a1)
+    ld s7, 72(a1)
+    ld s8, 80(a1)
+    ld s9, 88(a1)
+    ld s10, 96(a1)
+    ld s11, 104(a1)
 
     ld t0, 112(a1)
     csrw sepc, t0
@@ -185,9 +186,8 @@ __switch_to:
     ld t0, 128(a1)
     csrw sscratch, t0
 
-    csrw satp, a2   # set page table
+    csrw satp, a2                   # set page table
 
-    sfence.vma zero, zero //sfence.vma 指令用于刷新 TLB
-    fence.i //fence.i 指令用于刷新 icache
+    sfence.vma zero, zero
 
     ret

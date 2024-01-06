@@ -56,18 +56,24 @@ void setup_vm_final(void) {
     // No OpenSBI mapping required
 
     // mapping kernel text X|-|R|V
-    create_mapping(swapper_pg_dir, (uint64)&_stext, (uint64)(&_stext) - PA2VA_OFFSET, 2, 11);
+    create_mapping((uint64 *)swapper_pg_dir, (uint64)&_stext, (uint64)&_stext - PA2VA_OFFSET,
+                   (uint64)&_srodata - (uint64)&_stext, 0B1011);
 
     // mapping kernel rodata -|-|R|V
-    create_mapping(swapper_pg_dir, (uint64)&_srodata, (uint64)(&_srodata) - PA2VA_OFFSET, 1, 3);
+    create_mapping((uint64 *)swapper_pg_dir, (uint64)&_srodata, (uint64)&_srodata - PA2VA_OFFSET,
+                   (uint64)&_sdata - (uint64)&_srodata, 0B0011);
 
     // mapping other memory -|W|R|V
-    create_mapping(swapper_pg_dir, (uint64)&_sdata, (uint64)(&_sdata) - PA2VA_OFFSET, 32765, 7);
+    create_mapping((uint64 *)swapper_pg_dir, (uint64)&_sdata, (uint64)&_sdata - PA2VA_OFFSET,
+                   PHY_END + PA2VA_OFFSET - (uint64)&_sdata, 0B0111);
     printk("create_mapping all done\n");
 
-    // asm volatile("csrw satp,%[src]" ::[src] "r"(satpValue) :);
-    __asm__ volatile("csrw satp, %[src]" ::[src] "r"((uint64)swapper_pg_dir) :); // todo why??
+    printk("satp(old): %llx\n", csr_read(satp));
+    uint64 satp_ = (8UL << 60) | (((uint64)swapper_pg_dir - PA2VA_OFFSET) >> 12);
+    printk("satp(target): %llx\n", satp_);
+    csr_write(satp, satp_);
 
+    printk("satp(new): %llx\n", csr_read(satp));
     // flush TLB
     asm volatile("sfence.vma zero, zero");
 
@@ -77,9 +83,9 @@ void setup_vm_final(void) {
     return;
 }
 
-/* 创建多级页表映射关系 */
+/**** 创建多级页表映射关系 *****/
 /* 不要修改该接口的参数和返回值 */
-void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, int perm) { // sz的单位是4kb,即sz代表要映射的页面个数
+void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, uint64 perm) {
     /*
     pgtbl 为根页表的基地址
     va, pa 为需要映射的虚拟地址、物理地址
@@ -89,39 +95,37 @@ void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, int perm) { 
     创建多级页表的时候可以使用 kalloc() 来获取一页作为页表目录
     可以使用 V bit 来判断页表项是否存在
     */
+    while (sz > 0) {
+        uint64 vpn2 = (va >> 30) & 0x1ff;
+        uint64 vpn1 = (va >> 21) & 0x1ff;
+        uint64 vpn0 = (va >> 12) & 0x1ff;
 
-    // 判断是leaf page table：pte.v == 1 ,并且pte.r或者pte.x其中一个为1
-    while (sz--) {
-        uint64 vpn2 = (va >> 30) & 0x1ff; // va中的30-39位为vpn2
-        uint64 vpn1 = (va >> 21) & 0x1ff; // va中的21-29位为vpn1
-        uint64 vpn0 = (va >> 12) & 0x1ff; // va中的12-20位为vpn0
-        uint64 *pgtbl2;
-        uint64 *pgtbl3;
-
-        // 设置第二级页表
-        if (pgtbl[vpn2] & 0x1) {
-            pgtbl2 = ((pgtbl[vpn2] >> 10) & 0xfffffffffff) << 12; // 左移10位之后取44位，再右移12位
+        // 第二级页表
+        uint64 *pgtbl1;
+        // 检查有效
+        if (!(pgtbl[vpn2] & 1)) {
+            pgtbl1 = (uint64 *)kalloc();
+            pgtbl[vpn2] = (1 | (((uint64)pgtbl1 - PA2VA_OFFSET) >> 12 << 10));
         } else {
-            pgtbl2 = kalloc() - PA2VA_OFFSET; // 新申请一个页用于存储页表
-            pgtbl[vpn2] = (((uint64)pgtbl2 >> 12) << 10); // 地址中的ppn位于12-55位，pte中的ppn位于10-53位
-            pgtbl[vpn2] |= 0x1;
+            pgtbl1 = (uint64 *)((pgtbl[vpn2] >> 10 << 12) + PA2VA_OFFSET);
         }
 
-        // 设置第三级页表
-        if (pgtbl2[vpn1] & 0x1) {
-            pgtbl3 = ((pgtbl2[vpn1] >> 10) & 0xfffffffffff) << 12;
+        // 第三级页表
+        uint64 *pgtbl0;
+        // 检查有效
+        if (!(pgtbl1[vpn1] & 1)) {
+            pgtbl0 = (uint64 *)kalloc();
+            pgtbl1[vpn1] = (1 | (((uint64)pgtbl0 - PA2VA_OFFSET) >> 12 << 10));
         } else {
-            pgtbl3 = kalloc() - PA2VA_OFFSET;
-            pgtbl2[vpn1] = (uint64)pgtbl3 >> 2;
-            pgtbl2[vpn1] |= 0x1;
+            pgtbl0 = (uint64 *)((pgtbl1[vpn1] >> 10 << 12) + PA2VA_OFFSET);
         }
 
-        // 第三级页表映射到物理页
-        if (!(pgtbl3[vpn0] & 0x1)) {
-            pgtbl3[vpn0] = (uint64)pa >> 2;
-            pgtbl3[vpn0] &= 0xfffffffffffffff0; // perm 字段归零
-            pgtbl3[vpn0] |= perm;
-        }
-        va += 0x1000, pa += 0x1000; // 0x1000 B= 4kB,即一个页面的大小
+        // 物理页
+        pgtbl0[vpn0] = (perm | (pa >> 12 << 10));
+
+        // 映射下一页
+        sz -= 0x1000;
+        va += 0x1000;
+        pa += 0x1000;
     }
 }

@@ -52,9 +52,9 @@ _start:
     # set sstatus[SIE] = 1
     #sstatus ( Supervisor Status Register )中存在一个 SIE ( Supervisor Interrupt Enable ) 比特位
     #当该比特位设置为 1 时，会响应所有的 S 态 trap， 否则将会禁用所有 S 态 trap。
-    csrr t0, sstatus
-    ori t0, t0, 0x2
-    csrw sstatus, t0
+    # csrr t0, sstatus
+    # ori t0, t0, 0x2
+    # csrw sstatus, t0
 
     jal x0, start_kernel
 
