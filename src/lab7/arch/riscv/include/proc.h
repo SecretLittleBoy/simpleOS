@@ -7,7 +7,7 @@ typedef unsigned long *pagetable_t;
 #define VM_R_MASK 0x0000000000000002
 #define VM_ANONYM 0x0000000000000001
 
-#define NR_TASKS (1 + 3) // 用于控制 最大线程数量 （idle 线程 + 3 内核线程）
+#define NR_TASKS (1 + 1) // 用于控制 最大线程数量 （idle 线程 + 1 内核线程）
 
 #define TASK_RUNNING 0 // 为了简化实验, 所有的线程都只有一种状态
 
