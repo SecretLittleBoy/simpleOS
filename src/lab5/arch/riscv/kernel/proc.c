@@ -66,27 +66,13 @@ static uint64_t load_program_without_create_mapping(struct task_struct *task) {
     for (int i = 0; i < phdr_cnt; i++) {                            // 遍历每一个segement
         phdr = (Elf64_Phdr *)(phdr_start + sizeof(Elf64_Phdr) * i); // 获取当前segement的数据指针
         if (phdr->p_type == PT_LOAD) {
-            uint64 vaddr_round = (uint64)(phdr->p_vaddr) - PGROUNDDOWN(phdr->p_vaddr);
-
-            uint64 num_pages_to_copy = (vaddr_round + phdr->p_memsz) / PGSIZE + 1;
-            uint64 pages_dest_addr = alloc_pages(num_pages_to_copy);
-            uint64 pages_src_addr = (uint64)(_sramdisk) + phdr->p_offset; // p_offset：段内容的开始位置相对于文件开头的偏移量
-            memcpy((uint64 *)(pages_dest_addr + vaddr_round), (uint64 *)pages_src_addr, phdr->p_memsz);
-
-            uint64 perms = phdr->p_flags;
-            uint64 perm_r = (perms & 4) >> 1, perms_w = (perms & 2) << 1, perm_x = (perms & 1) << 3;
-            uint64 pages_perms = PTE_USER | perm_x | perms_w | perm_r | PTE_VALID;
-            // p_flags: 2|1|0   page table entry: 4|3|2|1|0
-            //          R|W|X                     U|X|W|R|V
-
-            create_mapping((uint64 *)task->pgd, (uint64)PGROUNDDOWN(phdr->p_vaddr),
-                           pages_dest_addr - PA2VA_OFFSET, num_pages_to_copy * PGSIZE, pages_perms);
+            do_mmap(task, phdr->p_vaddr, phdr->p_memsz, phdr->p_flags << 1,
+                    phdr->p_offset, phdr->p_filesz);
         }
     }
 
-    // allocate user stack and do mapping
-    uint64 addr = alloc_page();
-    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), PGSIZE, PTE_USER | PTE_WRITE | PTE_READ | PTE_VALID); // 映射用户栈 U-WRV
+    //do_mmap user stack
+    do_mmap(task, USER_END - PGSIZE, PGSIZE, VM_R_MASK | VM_W_MASK | VM_ANONYM, 0, 0);
 
     task->thread.sepc = ehdr->e_entry;
     task->thread.sstatus = SSTATUS_SPP_UMODE | SSTATUS_SPIE | SSTATUS_SUM;
@@ -151,8 +137,8 @@ void task_init() {
         task[i]->pgd = alloc_page();
         memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
 
-        load_program(task[i]);
-        //load_program_without_create_mapping(task[i]);
+        //load_program(task[i]);
+        load_program_without_create_mapping(task[i]);
         // useBinFile(task[i]);
     }
     printk("...task_init done!\n");
@@ -178,12 +164,24 @@ void dummy() { // 一个内核态程序
 
 // 创建一个新的 vma
 void do_mmap(struct task_struct *task, uint64_t addr, uint64_t length, uint64_t flags,
-             uint64_t vm_content_offset_in_file, uint64_t vm_content_size_in_file){
-
-             }
+             uint64_t vm_content_offset_in_file, uint64_t vm_content_size_in_file) {
+    struct vm_area_struct *vma = task->vmas + task->vma_cnt++;
+    vma->vm_start = addr;
+    vma->vm_end = addr + length;
+    vma->vm_flags = flags;
+    vma->vm_content_offset_in_file = vm_content_offset_in_file;
+    vma->vm_content_size_in_file = vm_content_size_in_file;
+}
 
 // 查找包含某个 addr 的 vma，该函数主要在 Page Fault 处理时起作用。
-struct vm_area_struct *find_vma(struct task_struct *task, uint64_t addr);
+struct vm_area_struct *find_vma(struct task_struct *task, uint64_t addr) {
+    for (int i = 0; i < task->vma_cnt; i++) {
+        if (task->vmas[i].vm_start <= addr && addr < task->vmas[i].vm_end) {
+            return task->vmas + i;
+        }
+    }
+    return 0;
+}
 
 void do_timer() {
     // 1. 如果当前线程是 idle 线程 直接进行调度

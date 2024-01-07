@@ -50,7 +50,7 @@ struct task_struct {
     pagetable_t pgd; // 页表
 
     uint64_t vma_cnt;              /* 下面这个数组里的元素的数量 */
-    struct vm_area_struct vmas[0]; /* 为什么可以开大小为 0 的数组? 这个定义可以和前面的 vma_cnt 换个位置吗? */
+    struct vm_area_struct vmas[0]; /* 可以开大小为 0 的数组，这个定义不可以和前面的 vma_cnt 换个位置*/
 };
 
 struct pt_regs {

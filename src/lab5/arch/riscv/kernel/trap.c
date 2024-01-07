@@ -1,5 +1,7 @@
 #include "proc.h"
 #include "syscall.h"
+#include "defs.h"
+#include "string.h"
 #define INTERRUPT_SIG 0x8000000000000000
 #define TIMER_INTERRUPT_SIG 0x5
 #define ECALL_FROM_USER 0x8
@@ -9,6 +11,11 @@
 
 #define SYS_WRITE 64
 #define SYS_GETPID 172
+
+extern struct task_struct *current;
+extern char _sramdisk[];
+extern char _eramdisk[];
+
 /*
 scause ( Supervisor Cause Register ), 会记录 trap 发生的原因，还会记录该 trap 是 Interrupt 还是 Exception。
 sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
@@ -26,7 +33,7 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
             do_timer();
             return;
         }
-    } else if (scause & ECALL_FROM_USER) { // ecall-from-user-mode
+    } else if (scause == ECALL_FROM_USER) { // ecall-from-user-mode
         //  printk("ecall from user mode\n");
         // 系统调用参数使用 a0 - a5 ，系统调用号使用 a7 ， 系统调用的返回值会被保存到 a0, a1 中。
         if (regs->a7 == SYS_WRITE) {
@@ -40,8 +47,35 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
         return;
     } else if (scause == INSTRUCTION_PAGE_FAULT || scause == LOAD_PAGE_FAULT || scause == STORE_PAGE_FAULT) {
         printk("[S] Page Fault at va: %lx, sepc: %lx, scause: %lx\n", regs->stval, sepc, scause);
-        
+        do_page_fault(regs);
     } else {
         printk("Unhandled exception! scause: %llx\n", scause);
+        while (1)
+            ;
     }
+}
+
+void do_page_fault(struct pt_regs *regs) {
+    /*
+     1. 通过 stval 获得访问出错的虚拟内存地址（Bad Address）
+     2. 通过 find_vma() 查找 Bad Address 是否在某个 vma 中
+     3. 分配一个页，将这个页映射到对应的用户地址空间
+     4. 通过 (vma->vm_flags & VM_ANONYM) 获得当前的 VMA 是否是匿名空间
+     5. 根据 VMA 匿名与否决定将新的页清零或是拷贝 uapp 中的内容
+    */
+    uint64 bad_addr = regs->stval;
+    uint64 bad_addr_floor = PGROUNDDOWN(bad_addr);
+    struct vm_area_struct *vma = find_vma(current, bad_addr);
+    if (vma == 0) {
+        printk("can't find vma, bad_addr: %lx\n", bad_addr);
+        return;
+    }
+
+    uint64 new_page = alloc_page();
+    if (vma->vm_flags & VM_ANONYM) {
+        memset((void *)new_page, 0, PGSIZE);
+    } else {//todo:优化，有时不需要拷贝整个page
+        memcpy((void *)new_page, (void *)(PGROUNDDOWN((uint64)_sramdisk) + (bad_addr_floor - PGROUNDDOWN((uint64)vma->vm_start))), PGSIZE);
+    }
+    create_mapping(current->pgd, bad_addr_floor, new_page - PA2VA_OFFSET, PGSIZE, vma->vm_flags | PTE_USER | PTE_VALID);
 }

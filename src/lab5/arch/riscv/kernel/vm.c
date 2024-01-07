@@ -85,7 +85,7 @@ void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, uint64 perm)
     /*
     pgtbl 为根页表的基地址
     va, pa 为需要映射的虚拟地址、物理地址
-    sz 为映射的大小，单位为字节
+    sz 为映射的大小，单位为字节,只能整页整页地映射
     perm 为映射的权限 (即页表项的低 8 位)
 
     创建多级页表的时候可以使用 alloc_page(); 来获取一页作为页表目录

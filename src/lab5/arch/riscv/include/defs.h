@@ -21,6 +21,9 @@
                      : "memory");        \
     })
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) < (b) ? (b) : (a))
+
 #define PHY_START 0x0000000080000000   // QEMU 环境中内存起始地址
 #define PHY_SIZE 128 * 1024 * 1024     // QEMU 默认内存大小：128MB
 #define PHY_END (PHY_START + PHY_SIZE) // 物理内存结束地址
