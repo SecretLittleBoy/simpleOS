@@ -18,8 +18,9 @@ extern char _sramdisk[];
 extern char _eramdisk[];
 
 static uint64_t load_program(struct task_struct *task) {
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_sramdisk; // 此时指向elf数据头
-
+    // ELF简要布局：https://zhuanlan.zhihu.com/p/286088470
+    // ELF64_Phdr详解：https://zhuanlan.zhihu.com/p/389408697
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_sramdisk;           // 此时指向elf数据头
     uint64_t phdr_start = (uint64_t)ehdr + ehdr->e_phoff; // 指向数据体
     int phdr_cnt = ehdr->e_phnum;                         // segement的metedata数量
 
@@ -27,27 +28,30 @@ static uint64_t load_program(struct task_struct *task) {
     for (int i = 0; i < phdr_cnt; i++) {                            // 遍历每一个segement
         phdr = (Elf64_Phdr *)(phdr_start + sizeof(Elf64_Phdr) * i); // 获取当前segement的数据指针
         if (phdr->p_type == PT_LOAD) {
-            /*当前segement的起始虚地址，可能并不刚好是一个页面的起始地址，分配页面的时候还需要考虑多余的这部分地址，否则地址转换会失败*/
-            uint64 offset = (uint64)(phdr->p_vaddr) - PGROUNDDOWN(phdr->p_vaddr);
-            uint64 sz = (phdr->p_memsz + offset) / PGSIZE + 1;
-            uint64 tar_addr = alloc_pages(sz);
-            // printk("%lx\n",((uint64*)tar_addr)[0]);
-            uint64 src_addr = (uint64)(_sramdisk) + phdr->p_offset;
-            /*在对应位置copy程序内容*/
-            memcpy(tar_addr + offset, src_addr, phdr->p_memsz);
-            int perm = 0x11 | (phdr->p_flags << 1);
+            uint64 vaddr_round = (uint64)(phdr->p_vaddr) - PGROUNDDOWN(phdr->p_vaddr);
 
-            // va->pa的映射，块头部空白的地址也需要映射，这样才能保证正确（类似于内部碎片）
-            create_mapping((uint64 *)task->pgd, (uint64)PGROUNDDOWN(phdr->p_vaddr), (uint64)(tar_addr)-PA2VA_OFFSET, sz, perm);
+            uint64 num_pages_to_copy = (vaddr_round + phdr->p_memsz) / PGSIZE + 1;
+            uint64 pages_dest_addr = alloc_pages(num_pages_to_copy);
+            uint64 pages_src_addr = (uint64)(_sramdisk) + phdr->p_offset; // p_offset：段内容的开始位置相对于文件开头的偏移量
+            memcpy((uint64 *)(pages_dest_addr + vaddr_round), (uint64 *)pages_src_addr, phdr->p_memsz);
+
+            uint64 perms = phdr->p_flags;
+            uint64 perm_r = (perms & 4) >> 1, perms_w = (perms & 2) << 1, perm_x = (perms & 1) << 3;
+            uint64 pages_perms = PTE_USER | perm_x | perms_w | perm_r | PTE_VALID;
+            // p_flags: 2|1|0   page table entry: 4|3|2|1|0
+            //          R|W|X                     U|X|W|R|V
+
+            create_mapping((uint64 *)task->pgd, (uint64)PGROUNDDOWN(phdr->p_vaddr),
+                           pages_dest_addr - PA2VA_OFFSET, num_pages_to_copy * PGSIZE, pages_perms);
         }
     }
 
     // allocate user stack and do mapping
     uint64 addr = alloc_page();
-    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), 1, 23); // 映射用户栈 U-WRV
+    create_mapping(task->pgd, (uint64)(USER_END)-PGSIZE, (uint64)(addr - PA2VA_OFFSET), PGSIZE, PTE_USER | PTE_WRITE | PTE_READ | PTE_VALID); // 映射用户栈 U-WRV
 
     task->thread.sepc = ehdr->e_entry;
-    task->thread.sstatus = SSTATUS_SPIE | SSTATUS_SUM;
+    task->thread.sstatus = SSTATUS_SPP_UMODE | SSTATUS_SPIE | SSTATUS_SUM;
     task->thread.sscratch = USER_END;
 }
 
@@ -109,8 +113,8 @@ void task_init() {
         task[i]->pgd = alloc_page();
         memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
 
-        // load_program(task[i]);
-        useBinFile(task[i]);
+        load_program(task[i]);
+        // useBinFile(task[i]);
     }
     printk("...task_init done!\n");
 }
