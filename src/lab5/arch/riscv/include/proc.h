@@ -90,6 +90,7 @@ struct pt_regs {
     uint64 sepc;
     uint64 sstatus;
     uint64 sscratch;
+    uint64 stval;
 };
 
 /* 线程初始化 创建 NR_TASKS 个线程 */

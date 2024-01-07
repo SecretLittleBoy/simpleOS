@@ -3,12 +3,16 @@
 #define INTERRUPT_SIG 0x8000000000000000
 #define TIMER_INTERRUPT_SIG 0x5
 #define ECALL_FROM_USER 0x8
+#define INSTRUCTION_PAGE_FAULT 0xc
+#define LOAD_PAGE_FAULT 0xd
+#define STORE_PAGE_FAULT 0xf
 
 #define SYS_WRITE 64
 #define SYS_GETPID 172
 /*
 scause ( Supervisor Cause Register ), 会记录 trap 发生的原因，还会记录该 trap 是 Interrupt 还是 Exception。
 sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
+当触发 page fault 时，stval 寄存器被被硬件自动设置为该出错的 VA 地址
 
 ecall ( Environment Call )，当我们在 S 态执行这条指令时，会触发一个 ecall-from-s-mode-exception，从而进入 M Mode 下的处理流程( 如设置定时器等 )；
 当我们在 U 态执行这条指令时，会触发一个 ecall-from-u-mode-exception，从而进入 S Mode 下的处理流程 ( 常用来进行系统调用 )。
@@ -34,6 +38,9 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
         }
         regs->sepc += 4;
         return;
+    } else if (scause == INSTRUCTION_PAGE_FAULT || scause == LOAD_PAGE_FAULT || scause == STORE_PAGE_FAULT) {
+        printk("[S] Page Fault at va: %lx, sepc: %lx, scause: %lx\n", regs->stval, sepc, scause);
+        
     } else {
         printk("Unhandled exception! scause: %llx\n", scause);
     }

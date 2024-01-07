@@ -4,24 +4,26 @@
 _traps:
 
 /*
+判断_traps来自于U-mode 还是 S-mode：
+方法一：
 SPP（Supervisor Previous Privilege）位是sstatus寄存器中的一个标志位，用于保存上一次的特权级别。它仅仅有一位，即位5。
-当SPP位为0时，意味着上一次的特权级别是用户模式（U-mode）。
-当SPP位为1时，意味着上一次的特权级别是监督模式（S-mode）。
 当处理器从一个特权级别切换到另一个特权级别时（大多数情况下，是从S模式切换到U模式，或者在处理中断或异常时从U模式切换到S模式），SPP位被用来保存原先的特权级别。
 这样，当异常处理完成或中断返回时，处理器可以通过查看SPP位，知道应该恢复到哪个特权级别。
+当SPP位为0时，意味着上一次的特权级别是用户模式（U-mode）。
+当SPP位为1时，意味着上一次的特权级别是监督模式（S-mode）。
+
+方法二：
+如果sscratch==0，来自于S-mode。否则来自U-mode
 */
-	#S-mode -> S-mode 不需要切换栈 :SPP = 1
-	#U-mode -> S-mode 需要切换栈 :SPP = 0
-	csrr t0, sstatus
-	andi t0, t0, 0x100
-	bne t0, x0, SKIP_SWITCH_STACK_0 #if(SPP != 0) goto SKIP_SWITCH_STACK_0
-	csrr t0, sscratch
-	csrw sscratch, sp
-	add sp, t0, x0
+	#S-mode -> S-mode 不需要切换栈
+	#U-mode -> S-mode 需要切换栈
+	csrrw sp, sscratch, sp # swap sp and sscratch
+	bne sp,x0, SKIP_SWAP_BACK_0
+	csrrw sp, sscratch, sp
 	
-SKIP_SWITCH_STACK_0:
-	# 1. save 32 registers and sepc,sstatus,sscratch to stack
-	addi sp, sp, - 272
+SKIP_SWAP_BACK_0:
+	# 1. save 32 registers and sepc,sstatus,sscratch,stval to stack
+	addi sp, sp, - 280
 	sd x1, 0(sp)
 	sd x2, 8(sp)
 	sd x3, 16(sp)
@@ -59,6 +61,8 @@ SKIP_SWITCH_STACK_0:
 	sd t0, 256(sp)
 	csrr t0, sscratch
 	sd t0, 264(sp)
+	csrr t0, stval
+	sd t0, 272(sp)
 	
 	# 2. call trap_handler
 	#RISC - V的约定是，函数使用a0到a7这八个寄存器来传递输入参数，其中a0是最左边的参数，a7是最右边的参数。
@@ -68,7 +72,9 @@ SKIP_SWITCH_STACK_0:
 	add a2, sp, x0
 	jal ra, trap_handler
 	
-	# 3. restore sepc,sstatus,sscratch and 32 registers (x2(sp) should be restore last) from stack
+	# 3. restore sepc,sstatus,sscratch,stval and 32 registers (x2(sp) should be restore last) from stack
+	ld t0, 272(sp)
+	csrw stval, t0
 	ld t0, 264(sp)
 	csrw sscratch, t0
 	ld t0, 248(sp)
@@ -106,17 +112,14 @@ SKIP_SWITCH_STACK_0:
 	ld x30, 232(sp)
 	ld x31, 240(sp)
 	ld x2, 8(sp) # x2 是 sp，所以要最后恢复
-	addi sp, sp, 272
+	addi sp, sp, 280
 	
 	#S-mode -> S-mode 不需要切换栈
 	#S-mode -> U-mode 需要切换栈
-	csrr t0, sstatus
-	andi t0, t0, 0x100
-	bne t0, x0, SKIP_SWITCH_STACK_1 #SPP != 0
-	csrr t0, sscratch
-	csrw sscratch, sp
-	add sp, t0, x0
-SKIP_SWITCH_STACK_1:
+	csrrw sp, sscratch, sp
+	bne sp,x0, SKIP_SWAP_BACK_1
+	csrrw sp, sscratch, sp
+SKIP_SWAP_BACK_1:
 	# 4. return from trap
 	sret
 	#sret是一个真正的指令，用于从监管者模式下的陷阱（异常或中断）返回。
