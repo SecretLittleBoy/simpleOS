@@ -4,14 +4,14 @@
 
 #define CAT_BUF_SIZE 509
 
-#define REDIR_TYPE_NONE     0
-#define REDIR_TYPE_APPEND   1
-#define REDIR_TYPE_COVER    2
+#define REDIR_TYPE_NONE 0
+#define REDIR_TYPE_APPEND 1
+#define REDIR_TYPE_COVER 2
 
 char string_buf[2048];
 char filename[2048];
 
-int atoi(char* str) {
+int atoi(char *str) {
     int ret = 0;
     int len = strlen(str);
     for (int i = 0; i < len; i++) {
@@ -20,7 +20,7 @@ int atoi(char* str) {
     return ret;
 }
 
-char* get_param(char* cmd) {
+char *get_param(char *cmd) {
     while (*cmd == ' ') {
         cmd++;
     }
@@ -32,7 +32,7 @@ char* get_param(char* cmd) {
     return string_buf;
 }
 
-char* get_string(char* cmd) {
+char *get_string(char *cmd) {
     while (*cmd == ' ') {
         cmd++;
     }
@@ -50,7 +50,7 @@ char* get_string(char* cmd) {
     }
 }
 
-int get_redir_type_and_filename(char* cmd) {
+int get_redir_type_and_filename(char *cmd) {
     int ret = REDIR_TYPE_NONE;
 
     while (*cmd == ' ' && *cmd != '\0') {
@@ -73,25 +73,25 @@ int get_redir_type_and_filename(char* cmd) {
     int pos = 0;
     while (*cmd != ' ' && *cmd != '\0') {
         filename[pos++] = *(cmd++);
-    } 
+    }
 
     return ret;
 }
 
-void parse_cmd(char* cmd, int len) {
+void parse_cmd(char *cmd, int len) {
     if (cmd[0] == 'e' && cmd[1] == 'c' && cmd[2] == 'h' && cmd[3] == 'o') {
         // char* param = get_param(cmd + 4, len - 4);
         // int len = strlen(param);
-        // char *param = 
+        // char *param =
         cmd += 4;
-        char* echo_content = get_string(cmd);
+        char *echo_content = get_string(cmd);
         len = strlen(echo_content);
         // write(1, echo_content, len);
         cmd += len;
         write(1, echo_content, len);
         write(1, "\n\r", 2);
     } else if (cmd[0] == 'c' && cmd[1] == 'a' && cmd[2] == 't') {
-        char* filename = get_param(cmd + 3);
+        char *filename = get_param(cmd + 3);
         char last_char;
         int fd = open(filename, O_RDONLY);
         char cat_buf[CAT_BUF_SIZE];
@@ -110,21 +110,21 @@ void parse_cmd(char* cmd, int len) {
                 if (cat_buf[i] == 0) {
                     write(1, "x", 1);
                 } else {
-                    write (1, &cat_buf[i], 1);
+                    write(1, &cat_buf[i], 1);
                 }
                 // printf("%c", cat_buf[i]);
                 last_char = cat_buf[i];
             }
         }
         close(fd);
-    // modify
-    } else if (cmd[0] == 'e' && cmd[1] == 'd' && cmd[2] == 'i' && cmd[3] == 't' ) {
+        // modify
+    } else if (cmd[0] == 'e' && cmd[1] == 'd' && cmd[2] == 'i' && cmd[3] == 't') {
         cmd += 4;
         while (*cmd == ' ' && *cmd != '\0') {
             cmd++;
         }
-        char* temp = get_param(cmd);
-        int len = strlen(temp); 
+        char *temp = get_param(cmd);
+        int len = strlen(temp);
         char filename[len + 1];
         for (int i = 0; i < len; i++) {
             filename[i] = temp[i];
@@ -158,7 +158,6 @@ void parse_cmd(char* cmd, int len) {
 
         int offset_int = atoi(offset);
 
-
         printf("%s\n", filename);
         printf("%d\n", offset_int);
         printf("%s\n", content);
@@ -179,7 +178,7 @@ int main() {
     // printf("echoing\n");
     char read_buf[2];
     char line_buf[128];
-    int  char_in_line = 0;
+    int char_in_line = 0;
     write(1, "SHELL > ", 8);
     while (1) {
         read(0, read_buf, 1);
