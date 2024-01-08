@@ -1,11 +1,15 @@
 #include <virtio.h>
 #include <mm.h>
 #include <debug.h>
-#include <clock.h>
+//#include <clock.h>
 
 volatile struct virtio_regs * virtio_blk_regs = NULL;
 struct vring virtio_blk_ring;
 uint64_t virtio_blk_capacity;
+
+uint64_t virt_to_phys(uint64_t vaddr) {
+    return VA2PA(vaddr);
+}
 
 void virtio_blk_driver_init() {
     virtio_blk_regs->Status = 0;

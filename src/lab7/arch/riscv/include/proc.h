@@ -1,5 +1,9 @@
+#ifndef _PROC_H_
+#define _PROC_H_
+
 #include "types.h"
 #include "stdint.h"
+#include "fs.h"
 typedef unsigned long *pagetable_t;
 
 #define VM_X_MASK 0x0000000000000008
@@ -48,6 +52,8 @@ struct task_struct {
     struct thread_struct thread;
 
     pagetable_t pgd; // 页表
+
+    struct file *files;
 
     uint64_t vma_cnt;              /* 下面这个数组里的元素的数量 */
     struct vm_area_struct vmas[0]; /* 可以开大小为 0 的数组，这个定义不可以和前面的 vma_cnt 换个位置*/
@@ -108,9 +114,4 @@ void switch_to(struct task_struct *next);
 /* dummy funciton: 一个循环程序, 循环输出自己的 pid 以及一个自增的局部变量 */
 void dummy();
 
-// 创建一个新的 vma
-void do_mmap(struct task_struct *task, uint64_t addr, uint64_t length, uint64_t flags,
-             uint64_t vm_content_offset_in_file, uint64_t vm_content_size_in_file);
-
-// 查找包含某个 addr 的 vma，该函数主要在 Page Fault 处理时起作用。
-struct vm_area_struct *find_vma(struct task_struct *task, uint64_t addr);
+#endif

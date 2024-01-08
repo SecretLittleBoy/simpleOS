@@ -1,5 +1,5 @@
 #include "proc.h"
-#include "syscall.h"
+#include "../include/syscall.h"
 #include "defs.h"
 #include "string.h"
 #define INTERRUPT_SIG 0x8000000000000000
@@ -9,6 +9,7 @@
 #define LOAD_PAGE_FAULT 0xd
 #define STORE_PAGE_FAULT 0xf
 
+#define SYS_READ 63
 #define SYS_WRITE 64
 #define SYS_GETPID 172
 
@@ -36,12 +37,21 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
     } else if (scause == ECALL_FROM_USER) { // ecall-from-user-mode
         //  printk("ecall from user mode\n");
         // 系统调用参数使用 a0 - a5 ，系统调用号使用 a7 ， 系统调用的返回值会被保存到 a0, a1 中。
-        if (regs->a7 == SYS_WRITE) {
-            printk("write to fd %d, %d bytes\n", regs->a0, regs->a2);
+        switch (regs->a7) {
+        case SYS_READ:
+            //printk("read from fd %d, %d bytes\n", regs->a0, regs->a2);
+            regs->a0 = sys_read(regs->a0, (char *)regs->a1, regs->a2);
+            break;
+        case SYS_WRITE:
+            //printk("write to fd %d, %d bytes\n", regs->a0, regs->a2);
             regs->a0 = sys_write(regs->a0, (const char *)regs->a1, regs->a2); // 返回值放入a0
-        } else if (regs->a7 == SYS_GETPID) {
+            break;
+        case SYS_GETPID:
             regs->a0 = sys_getpid();
-            printk("getpid: %d\n", regs->a0);
+            //printk("getpid: %d\n", regs->a0);
+            break;
+        default:
+            break;
         }
         regs->sepc += 4;
         return;
@@ -74,7 +84,7 @@ void do_page_fault(struct pt_regs *regs) {
     uint64 new_page = alloc_page();
     if (vma->vm_flags & VM_ANONYM) {
         memset((void *)new_page, 0, PGSIZE);
-    } else {//todo:优化，有时不需要拷贝整个page
+    } else { // todo:优化，有时不需要拷贝整个page
         memcpy((void *)new_page, (void *)(PGROUNDDOWN((uint64)_sramdisk) + (bad_addr_floor - PGROUNDDOWN((uint64)vma->vm_start))), PGSIZE);
     }
     create_mapping(current->pgd, bad_addr_floor, new_page - PA2VA_OFFSET, PGSIZE, vma->vm_flags | PTE_USER | PTE_VALID);

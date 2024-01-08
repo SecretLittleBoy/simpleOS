@@ -1,3 +1,5 @@
+#include "clock.h"
+
 unsigned long TIMECLOCK = 10000000; // QEMU中时钟的频率是10MHz, 也就是1秒钟相当于10000000个时钟周期。
 
 unsigned long get_cycles() {

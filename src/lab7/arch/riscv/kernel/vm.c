@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "string.h"
 #include "printk.h"
+#include "proc.h"
 
 /* early_pgtbl: 用于 setup_vm 进行 1GB 的 映射。 */
 unsigned long early_pgtbl[512] __attribute__((__aligned__(0x1000)));
@@ -124,4 +125,25 @@ void create_mapping(uint64 *pgtbl, uint64 va, uint64 pa, uint64 sz, uint64 perm)
         va += 0x1000;
         pa += 0x1000;
     }
+}
+
+// 创建一个新的 vma
+void do_mmap(struct task_struct *task, uint64_t addr, uint64_t length, uint64_t flags,
+             uint64_t vm_content_offset_in_file, uint64_t vm_content_size_in_file) {
+    struct vm_area_struct *vma = task->vmas + task->vma_cnt++;
+    vma->vm_start = addr;
+    vma->vm_end = addr + length;
+    vma->vm_flags = flags;
+    vma->vm_content_offset_in_file = vm_content_offset_in_file;
+    vma->vm_content_size_in_file = vm_content_size_in_file;
+}
+
+// 查找包含某个 addr 的 vma，该函数主要在 Page Fault 处理时起作用。
+struct vm_area_struct *find_vma(struct task_struct *task, uint64_t addr) {
+    for (int i = 0; i < task->vma_cnt; i++) {
+        if (task->vmas[i].vm_start <= addr && addr < task->vmas[i].vm_end) {
+            return task->vmas + i;
+        }
+    }
+    return 0;
 }

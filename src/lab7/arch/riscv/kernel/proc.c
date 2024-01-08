@@ -5,6 +5,9 @@
 #include "printk.h"
 #include "test.h"
 #include "elf.h"
+#include "vm.h"
+#include "fs.h"
+
 extern void __dummy();
 
 struct task_struct *idle;           // idle process
@@ -133,7 +136,7 @@ void task_init() {
         task[i]->pid = i;
         task[i]->thread.ra = (uint64)__dummy;
         task[i]->thread.sp = (uint64)task[i] + PGSIZE - 1;
-
+        task[i]->files = file_init();
         task[i]->pgd = alloc_page();
         memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
 
@@ -160,27 +163,6 @@ void dummy() { // 一个内核态程序
             }
         }
     }
-}
-
-// 创建一个新的 vma
-void do_mmap(struct task_struct *task, uint64_t addr, uint64_t length, uint64_t flags,
-             uint64_t vm_content_offset_in_file, uint64_t vm_content_size_in_file) {
-    struct vm_area_struct *vma = task->vmas + task->vma_cnt++;
-    vma->vm_start = addr;
-    vma->vm_end = addr + length;
-    vma->vm_flags = flags;
-    vma->vm_content_offset_in_file = vm_content_offset_in_file;
-    vma->vm_content_size_in_file = vm_content_size_in_file;
-}
-
-// 查找包含某个 addr 的 vma，该函数主要在 Page Fault 处理时起作用。
-struct vm_area_struct *find_vma(struct task_struct *task, uint64_t addr) {
-    for (int i = 0; i < task->vma_cnt; i++) {
-        if (task->vmas[i].vm_start <= addr && addr < task->vmas[i].vm_end) {
-            return task->vmas + i;
-        }
-    }
-    return 0;
 }
 
 void do_timer() {
