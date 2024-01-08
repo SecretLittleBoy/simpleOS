@@ -1,9 +1,9 @@
 #include <virtio.h>
 #include <mm.h>
 #include <debug.h>
-//#include <clock.h>
+// #include <clock.h>
 
-volatile struct virtio_regs * virtio_blk_regs = NULL;
+volatile struct virtio_regs *virtio_blk_regs = NULL;
 struct vring virtio_blk_ring;
 uint64_t virtio_blk_capacity;
 
@@ -35,7 +35,6 @@ void virtio_blk_feature_init() {
     virtio_blk_regs->DriverFeaturesSel = 1;
     virtio_blk_regs->DriverFeatures = 0x0;
 
-
     virtio_blk_regs->Status |= DEVICE_FEATURES_OK;
     memory_barrier();
     // printk("[S] virtio_blk_regs->DeviceFeatures: %08x\n", virtio_blk_regs->DeviceFeatures);
@@ -45,15 +44,15 @@ void virtio_blk_feature_init() {
 
 void virtio_blk_queue_init() {
     virtio_blk_ring.num = VIRTIO_QUEUE_SIZE;
-    
+
     uint64_t size_of_descs = VIRTIO_QUEUE_SIZE * sizeof(struct virtio_desc);
     uint64_t size_of_avail = sizeof(struct virtio_avail);
     uint64_t size_of_used = sizeof(struct virtio_used);
 
     uint64_t pages = alloc_pages(3);
-    virtio_blk_ring.desc = (struct virtio_desc*)(pages);
-    virtio_blk_ring.avail = (struct virtio_avail*)(pages + PGSIZE);
-    virtio_blk_ring.used = (struct virtio_used*)(pages + 2*PGSIZE);
+    virtio_blk_ring.desc = (struct virtio_desc *)(pages);
+    virtio_blk_ring.avail = (struct virtio_avail *)(pages + PGSIZE);
+    virtio_blk_ring.used = (struct virtio_used *)(pages + 2 * PGSIZE);
 
     virtio_blk_ring.avail->flags = VIRTQ_AVAIL_F_NO_INTERRUPT;
 
@@ -78,7 +77,7 @@ void virtio_blk_queue_init() {
 }
 
 void virtio_blk_config_init() {
-    volatile struct virtio_blk_config *config = (struct virtio_blk_config*)(&virtio_blk_regs->Config);
+    volatile struct virtio_blk_config *config = (struct virtio_blk_config *)(&virtio_blk_regs->Config);
     uint64_t capacity = ((uint64_t)config->capacity_hi << 32) | config->capacity_lo;
     // printk("[S] virtio-blk Disk Capacity: %016llx\n", capacity);
 }
@@ -87,7 +86,7 @@ void virtio_blk_config_init() {
 char virtio_blk_status;
 struct virtio_blk_req virtio_blk_req;
 
-void virtio_blk_cmd(uint32_t type, uint32_t sector, void* buf) {
+void virtio_blk_cmd(uint32_t type, uint32_t sector, void *buf) {
 
     // printk("avail->idx: %d, used->idx: %d\n", virtio_blk_ring.avail->idx, virtio_blk_ring.used->idx);
 
@@ -95,7 +94,7 @@ void virtio_blk_cmd(uint32_t type, uint32_t sector, void* buf) {
     //     virtio_blk_ring.desc[i - 1].next = i;
     // }
 
-	virtio_blk_req.type = type;
+    virtio_blk_req.type = type;
     virtio_blk_req.sector = sector;
 
     virtio_blk_ring.desc[0].addr = virt_to_phys((uint64_t)&virtio_blk_req);
@@ -106,7 +105,7 @@ void virtio_blk_cmd(uint32_t type, uint32_t sector, void* buf) {
     virtio_blk_ring.desc[1].addr = virt_to_phys((uint64_t)buf);
     virtio_blk_ring.desc[1].len = VIRTIO_BLK_SECTOR_SIZE;
     if (type == VIRTIO_BLK_T_IN) {
-        virtio_blk_ring.desc[1].flags = VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT; 
+        virtio_blk_ring.desc[1].flags = VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT;
     } else {
         virtio_blk_ring.desc[1].flags = VIRTQ_DESC_F_NEXT;
     }
@@ -146,7 +145,7 @@ void virtio_blk_read_sector(uint64_t sector, void *buf) {
 void virtio_blk_write_sector(uint64_t sector, const void *buf) {
     uint64_t original_idx = virtio_blk_ring.used->idx;
     // virtio_blk_cmd(VIRTIO_BLK_T_IN | VIRTIO_BLK_T_OUT, sector, (void*)buf);
-    virtio_blk_cmd(VIRTIO_BLK_T_OUT, sector, (void*)buf);
+    virtio_blk_cmd(VIRTIO_BLK_T_OUT, sector, (void *)buf);
     while (1) {
         if (virtio_blk_ring.used->idx != original_idx) {
             break;
@@ -185,7 +184,8 @@ void virtio_blk_init() {
 
     if (boot_signature[0] != 0x55 || boot_signature[1] != 0xaa) {
         printk("[S] mbr boot signature not found!\n");
-        while (1);
+        while (1)
+            ;
     } else {
         // printk("[S] mbr boot signature found!\n");
     }
@@ -194,7 +194,7 @@ void virtio_blk_init() {
 }
 
 int virtio_dev_test(uint64_t virtio_addr) {
-    void *virtio_space = (char*)(virtio_addr);
+    void *virtio_space = (char *)(virtio_addr);
 
     struct virtio_regs *virtio_header = virtio_space;
     if (in32(&virtio_header->DeviceID) == ID_VIRTIO_BLK) {

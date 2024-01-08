@@ -9,9 +9,13 @@
 #define LOAD_PAGE_FAULT 0xd
 #define STORE_PAGE_FAULT 0xf
 
+#define SYS_OPENAT 56
+#define SYS_CLOSE 57
+#define SYS_LSEEK 62
 #define SYS_READ 63
 #define SYS_WRITE 64
 #define SYS_GETPID 172
+#define SYS_CLONE 220
 
 extern struct task_struct *current;
 extern char _sramdisk[];
@@ -39,17 +43,29 @@ void trap_handler(unsigned long scause, unsigned long sepc, struct pt_regs *regs
         // 系统调用参数使用 a0 - a5 ，系统调用号使用 a7 ， 系统调用的返回值会被保存到 a0, a1 中。
         switch (regs->a7) {
         case SYS_READ:
-            //printk("read from fd %d, %d bytes\n", regs->a0, regs->a2);
+            // printk("read from fd %d, %d bytes\n", regs->a0, regs->a2);
             regs->a0 = sys_read(regs->a0, (char *)regs->a1, regs->a2);
             break;
         case SYS_WRITE:
-            //printk("write to fd %d, %d bytes\n", regs->a0, regs->a2);
+            // printk("write to fd %d, %d bytes\n", regs->a0, regs->a2);
             regs->a0 = sys_write(regs->a0, (const char *)regs->a1, regs->a2); // 返回值放入a0
             break;
         case SYS_GETPID:
             regs->a0 = sys_getpid();
-            //printk("getpid: %d\n", regs->a0);
+            // printk("getpid: %d\n", regs->a0);
             break;
+        case SYS_LSEEK: {
+            regs->a0 = sys_lseek(regs->a0, regs->a1, regs->a2);
+            break;
+        }
+        case SYS_OPENAT: {
+            regs->a0 = sys_openat(regs->a0, (const char *)regs->a1, regs->a2);
+            break;
+        }
+        case SYS_CLOSE: {
+            regs->a0 = sys_close(regs->a0);
+            break;
+        }
         default:
             break;
         }
