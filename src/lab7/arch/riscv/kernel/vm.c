@@ -3,6 +3,7 @@
 #include "string.h"
 #include "printk.h"
 #include "proc.h"
+#include "virtio.h"
 
 /* early_pgtbl: 用于 setup_vm 进行 1GB 的 映射。 */
 unsigned long early_pgtbl[512] __attribute__((__aligned__(0x1000)));
@@ -65,6 +66,8 @@ void setup_vm_final(void) {
     // mapping other memory -|W|R|V
     create_mapping((uint64 *)swapper_pg_dir, (uint64)&_sdata, (uint64)&_sdata - PA2VA_OFFSET,
                    PHY_END + PA2VA_OFFSET - (uint64)&_sdata, PTE_WRITE | PTE_READ | PTE_VALID);
+
+    create_mapping((uint64 *)swapper_pg_dir, io_to_virt(VIRTIO_START), VIRTIO_START, VIRTIO_SIZE * VIRTIO_COUNT, PTE_WRITE | PTE_READ | PTE_VALID);
     printk("create_mapping all done\n");
 
     printk("satp(old): %llx\n", csr_read(satp));

@@ -7,6 +7,7 @@
 #include "elf.h"
 #include "vm.h"
 #include "fs.h"
+#include "virtio.h"
 
 extern void __dummy();
 
@@ -74,7 +75,7 @@ static uint64_t load_program_without_create_mapping(struct task_struct *task) {
         }
     }
 
-    //do_mmap user stack
+    // do_mmap user stack
     do_mmap(task, USER_END - PGSIZE, PGSIZE, VM_R_MASK | VM_W_MASK | VM_ANONYM, 0, 0);
 
     task->thread.sepc = ehdr->e_entry;
@@ -140,10 +141,13 @@ void task_init() {
         task[i]->pgd = alloc_page();
         memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE); // 为了避免 U-Mode 和 S-Mode 切换的时候切换页表，我们将内核页表 （ swapper_pg_dir ） 复制到每个进程的页表中。
 
-        //load_program(task[i]);
-        load_program_without_create_mapping(task[i]);
+        load_program(task[i]);
+        // load_program_without_create_mapping(task[i]);
         // useBinFile(task[i]);
     }
+    virtio_dev_init();
+    printk("virtio_dev_init done");
+    mbr_init();
     printk("...task_init done!\n");
 }
 
@@ -204,12 +208,12 @@ START_OF_SHORT_JOB_FIRST_SCHEDULE:
     switch_to(task[minIndex]);
 
 #elif defined(PRIORITY_SCHEDULE)
-    printk("start PRIORITY_SCHEDULE\n");
+    //printk("start PRIORITY_SCHEDULE\n");
 START_OF_PRIORITY_SCHEDULE:
     uint64 max = 0;
     int maxIndex = 0;
     for (int i = 1; i < NR_TASKS; ++i) {
-        printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
+        //printk("task[%d]->priority = %d, counter = %d\n", i, task[i]->priority, task[i]->counter);
         if (task[i]->priority > max && task[i]->counter > 0) {
             max = task[i]->priority;
             maxIndex = i;
@@ -221,7 +225,7 @@ START_OF_PRIORITY_SCHEDULE:
         }
         goto START_OF_PRIORITY_SCHEDULE;
     }
-    printk("switch_to ing  maxIndex = %d\n", maxIndex);
+    //printk("switch_to ing  maxIndex = %d\n", maxIndex);
     switch_to(task[maxIndex]);
 #endif
 }
