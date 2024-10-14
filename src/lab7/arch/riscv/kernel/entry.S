@@ -55,13 +55,13 @@ SKIP_SWAP_BACK_0:
 	sd x29, 224(sp)
 	sd x30, 232(sp)
 	sd x31, 240(sp)
-	csrr t0, sepc
+	csrr t0, sepc # sepc ( Supervisor Exception Program Counter ), 会记录触发 exception 的那条指令的地址。
 	sd t0, 248(sp)
-	csrr t0, sstatus
+	csrr t0, sstatus # sstatus ( Supervisor Status Register )中存在一个 SIE ( Supervisor Interrupt Enable ) 比特位，当该比特位设置为 1 时，会响应所有的 S 态 trap， 否则将会禁用所有 S 态 trap。
 	sd t0, 256(sp)
-	csrr t0, sscratch
+	csrr t0, sscratch # 在内核态可以用 sp 和 sscratch 来存储内核态和用户态的两个指针
 	sd t0, 264(sp)
-	csrr t0, stval
+	csrr t0, stval # 当触发 page fault 时，stval 寄存器被被硬件自动设置为该出错的 VA 地址
 	sd t0, 272(sp)
 	
 	# 2. call trap_handler
